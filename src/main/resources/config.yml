@@ -1,14 +1,24 @@
 # Настройки SleepSkip
 settings:
-  required-type: "percent"  # "fixed" или "percent"
-  required-value: 50        # Значение порога (число или процент)
+  required-type: "percent"  # "fixed" или "percent" - определяет способ подсчета необходимых спящих игроков
+  required-value: 50        # Значение порога: для "fixed" - число игроков, для "percent" - процент (0-100)
 
-  ignore-afk: true         # Исключать ли AFK-игроков (CMI/EssentialsX)
-  skip-rain: true          # Пропускать ли дождь при пропуске ночи
-  per-world: false         # Использовать разные настройки для миров
-  use-actionbar: true      # Использовать экшен-бар для уведомлений
+  ignore-afk: true         # Исключать ли AFK-игроков из подсчета (true/false)
+  afk-timeout: 300         # Время бездействия в секундах для собственной проверки AFK
 
+  actionbar-duration: 5    # Длительность отображения ActionBar в секундах
+  skip-rain: true          # Пропускать ли дождь при пропуске ночи (true/false)
+  per-world: false         # Использовать разные настройки для каждого мира (true/false)
+  use-actionbar: true      # Использовать экшен-бар для уведомлений (true/false)
+
+# Сообщения плагина. Поддерживаются RGB-цвета (например, <#F6AD72>) и стандартные цвета (<red>, <yellow>)
 messages:
-  nightSkipped: "<#F6AD72>Ночь пропущена! Доброе утро!"
-  sleepingStatus: "<#EC9793>{sleeping}/{needed} &fигроков спит. Нужно <#EC9793>{needed} &fдля пропуска ночи!"
-  not-enough: "&cНедостаточно игроков спит!"
+  nightSkipped: "<#F6AD72>Ночь пропущена! Доброе утро!"  # Сообщение при пропуске ночи
+  sleepingStatus: "<#EC9793>{sleeping}/{needed} игроков спит. Нужно <#EC9793>{needed} для пропуска ночи!"  # Статус сна игроков
+  not-enough: "<red>Недостаточно игроков спит!"  # Сообщение, если не хватает спящих
+  no-permission: "<red>У вас нет прав для использования этой команды!"  # Сообщение об отсутствии прав
+  reload-success: "<green>Конфиг перезагружен!"  # Успешная перезагрузка конфига
+  status-message: "<#F6AD72>Плагин SleepSkip работает корректно."  # Статус плагина
+  help-title: "<gold>=== SleepSkip Команды ==="  # Заголовок помощи
+  help-reload: "<yellow>/sleep reload - Перезагрузить конфиг"  # Описание команды reload
+  help-status: "<yellow>/sleep status - Проверить статус плагина"  # Описание команды status

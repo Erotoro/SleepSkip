@@ -10,8 +10,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerBedLeaveEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.Statistic;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -32,33 +32,66 @@ public class SleepListener implements Listener {
         if (event.getBedEnterResult() != PlayerBedEnterEvent.BedEnterResult.OK) return;
 
         Player player = event.getPlayer();
+        World world = player.getWorld();
+
+        // Проверка времени суток (только ночь)
+        if (world.getTime() < 12541 || world.getTime() > 23458) {
+            return;
+        }
+
+        // Обновляем активность игрока
+        afkChecker.updatePlayerActivity(player);
+
         sleepingPlayers.add(player);
         checkAndSkipNight(player);
     }
 
     @EventHandler
     public void onPlayerWakeUp(PlayerBedLeaveEvent event) {
-        sleepingPlayers.remove(event.getPlayer());
+        Player player = event.getPlayer();
+        sleepingPlayers.remove(player);
+        afkChecker.updatePlayerActivity(player);
+    }
+
+    @EventHandler
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        // Обновляем активность игрока при взаимодействии
+        afkChecker.updatePlayerActivity(event.getPlayer());
     }
 
     private void checkAndSkipNight(Player triggeringPlayer) {
-        long totalPlayers = Bukkit.getOnlinePlayers().stream()
-                .filter(p -> !afkChecker.isPlayerAFK(p))
-                .count();
+        World world = triggeringPlayer.getWorld();
+        boolean perWorld = plugin.getConfig().getBoolean("settings.per-world", false);
 
-        int sleeping = sleepingPlayers.size();
+        // Подсчет активных игроков (только в этом мире, если per-world включен)
+        long totalPlayers = 0;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (perWorld && !p.getWorld().equals(world)) continue;
+            if (!afkChecker.isPlayerAFK(p)) {
+                totalPlayers++;
+            }
+        }
+
+        // Подсчет спящих игроков в этом мире
+        int sleeping = 0;
+        for (Player p : sleepingPlayers) {
+            if (perWorld && !p.getWorld().equals(world)) continue;
+            sleeping++;
+        }
+
         int needed = getRequiredSleepers((int) totalPlayers);
 
         if (sleeping >= needed) {
-            // Если достаточно игроков спит, запускаем плавное переключение ночи.
-            skipNight(triggeringPlayer.getWorld());
+            skipNight(world);
         } else {
             // Читаем сообщение из конфига и заменяем плейсхолдеры
             String statusMsg = plugin.getConfig().getString("messages.sleepingStatus",
-                    "&e{sleeping}/{needed} игроков спит. Нужно {needed} для пропуска ночи!");
+                    "<yellow>{sleeping}/{needed} игроков спит. Нужно <yellow>{needed} для пропуска ночи!");
             statusMsg = statusMsg.replace("{sleeping}", String.valueOf(sleeping))
                     .replace("{needed}", String.valueOf(needed));
-            ActionBar.sendToAll(plugin, statusMsg, 5);
+
+            int actionbarDuration = plugin.getConfig().getInt("settings.actionbar-duration", 5);
+            ActionBar.sendToAll(plugin, statusMsg, actionbarDuration);
         }
     }
 
@@ -73,54 +106,27 @@ public class SleepListener implements Listener {
     }
 
     private void skipNight(World world) {
-        if (Bukkit.getServer().getName().contains("Folia")) {
-            Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
-                long currentTime = world.getTime();
-                if (currentTime < 12541 || currentTime >= 24000) {
-                    world.setTime(0);
-                    world.setStorm(false);
-                    world.setThundering(false);
+        // Установка времени на утро
+        world.setTime(0);
 
-                    // Сброс статистики TIME_SINCE_REST для всех спящих игроков (сброс фантомов)
-                    for (Player sleepingPlayer : sleepingPlayers) {
-                        sleepingPlayer.setStatistic(Statistic.TIME_SINCE_REST, 0);
-                    }
-
-                    // Читаем сообщение из конфига и отправляем его
-                    String nightMsg = plugin.getConfig().getString("messages.nightSkipped",
-                            "&aНочь пропущена! Доброе утро!");
-                    ActionBar.sendToAll(plugin, nightMsg, 4);
-                    sleepingPlayers.clear();
-                    task.cancel();
-                    return;
-                }
-                world.setTime(currentTime + 100);
-            }, 1L, 2L);
-        } else {
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    long currentTime = world.getTime();
-                    if (currentTime < 12541 || currentTime >= 24000) {
-                        world.setTime(0);
-                        world.setStorm(false);
-                        world.setThundering(false);
-
-                        // Сброс статистики TIME_SINCE_REST для всех спящих игроков (сброс фантомов)
-                        for (Player sleepingPlayer : sleepingPlayers) {
-                            sleepingPlayer.setStatistic(Statistic.TIME_SINCE_REST, 0);
-                        }
-
-                        String nightMsg = plugin.getConfig().getString("messages.nightSkipped",
-                                "&aНочь пропущена! Доброе утро!");
-                        ActionBar.sendToAll(plugin, nightMsg, 5);
-                        sleepingPlayers.clear();
-                        cancel();
-                        return;
-                    }
-                    world.setTime(currentTime + 100);
-                }
-            }.runTaskTimer(plugin, 0L, 2L);
+        // Остановка дождя и грозы, если включено в конфиге
+        if (plugin.getConfig().getBoolean("settings.skip-rain", true)) {
+            world.setStorm(false);
+            world.setThundering(false);
         }
+
+        // Сброс статистики TIME_SINCE_REST для всех спящих игроков (чтобы фантомы не спавнились)
+        for (Player sleepingPlayer : sleepingPlayers) {
+            sleepingPlayer.setStatistic(Statistic.TIME_SINCE_REST, 0);
+        }
+
+        // Читаем сообщение из конфига и отправляем его
+        String nightMsg = plugin.getConfig().getString("messages.nightSkipped",
+                "<green>Ночь пропущена! Доброе утро!");
+        int actionbarDuration = plugin.getConfig().getInt("settings.actionbar-duration", 5);
+        ActionBar.sendToAll(plugin, nightMsg, actionbarDuration);
+
+        // Очищаем список спящих игроков
+        sleepingPlayers.clear();
     }
 }

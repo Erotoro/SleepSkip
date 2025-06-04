@@ -1,42 +1,65 @@
 package me.Erotoro.sleepskip.afk;
 
-import org.bukkit.Bukkit;
+import me.Erotoro.sleepskip.SleepSkip;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.NotNull;
 
-public class AFKChecker {
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
-    // Заглушки для CMI и EssentialsX. После подключения реальных зависимостей замените типы.
-    private final Object cmi;
-    private final Object essentials;
+public class AFKChecker implements Listener {
+
+    private final SleepSkip plugin;
     private final boolean ignoreAfk;
+    private final Map<UUID, Long> lastActivity = new HashMap<>();
 
-    public AFKChecker(@NotNull Plugin plugin) {
-        Plugin cmiPlugin = Bukkit.getPluginManager().getPlugin("CMI");
-        // Если требуется, можно проверить instanceof, но если плагин не найден, получим null.
-        this.cmi = cmiPlugin; // заглушка
-
-        Plugin essPlugin = Bukkit.getPluginManager().getPlugin("Essentials");
-        this.essentials = essPlugin; // заглушка
-
+    public AFKChecker(@NotNull SleepSkip plugin) {
+        this.plugin = plugin;
         this.ignoreAfk = plugin.getConfig().getBoolean("settings.ignore-afk", true);
+
+        // Регистрация слушателя событий
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+
+        // Инициализация времени активности для текущих игроков
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            lastActivity.put(player.getUniqueId(), System.currentTimeMillis());
+        }
+    }
+
+    @EventHandler
+    public void onPlayerMove(PlayerMoveEvent event) {
+        // Обновляем время активности при движении игрока
+        updatePlayerActivity(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        // Удаляем игрока из списка при выходе
+        lastActivity.remove(event.getPlayer().getUniqueId());
     }
 
     public boolean isPlayerAFK(Player player) {
-        if (!ignoreAfk) return false;
+        if (!ignoreAfk) return false; // Если игнорирование AFK отключено, считаем игрока активным
 
-        // Если CMI установлен, используйте его API (пример):
-        if (cmi != null) {
-            // Пример: return ((CMIUser)cmi.getPlayerManager().getUser(player)).isAfk();
-            return false; // заглушка
+        UUID uuid = player.getUniqueId();
+        if (!lastActivity.containsKey(uuid)) {
+            // Если игрок только зашел, инициализируем его время
+            lastActivity.put(uuid, System.currentTimeMillis());
+            return false;
         }
 
-        // Если Essentials установлен, используйте его API (пример):
-        if (essentials != null) {
-            // Пример: return ((IEssentials)essentials).getUser(player).isAfk();
-            return false; // заглушка
-        }
-        return false;
+        long afkTimeout = plugin.getConfig().getLong("settings.afk-timeout", 300) * 1000; // По умолчанию 300 секунд
+        return System.currentTimeMillis() - lastActivity.get(uuid) > afkTimeout;
+    }
+
+    // Метод для обновления активности игрока (вызывается при движении или других действиях)
+    public void updatePlayerActivity(Player player) {
+        if (player.hasMetadata("NPC")) return; // Игнорируем NPC
+        lastActivity.put(player.getUniqueId(), System.currentTimeMillis());
     }
 }

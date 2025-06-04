@@ -7,23 +7,26 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ActionBar {
 
-    /**
-     * Отправляет сообщение в ActionBar всем игрокам в течение durationInSeconds секунд.
-     * Сообщение обрабатывается через MiniMessage с поддержкой RGB (например, "<gradient:#FF0000:#00FF00>Привет</gradient>").
-     *
-     * @param plugin             ссылка на главный класс плагина
-     * @param message            сообщение для отображения (форматируется через MiniMessage)
-     * @param durationInSeconds  длительность показа в секундах
-     */
+    private static final MiniMessage miniMessage = MiniMessage.miniMessage();
+
     public static void sendToAll(SleepSkip plugin, String message, int durationInSeconds) {
-        Component component = MiniMessage.miniMessage().deserialize(message);
+        Component component = miniMessage.deserialize(message);
+        List<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
+        if (players.isEmpty()) {
+            plugin.getLogger().info("ActionBar: Нет игроков для отправки сообщения: " + message);
+            return;
+        }
+
         if (Bukkit.getServer().getName().contains("Folia")) {
             final int[] iterations = {0};
             Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
                 iterations[0]++;
-                for (Player player : Bukkit.getOnlinePlayers()) {
+                for (Player player : players) {
                     player.sendActionBar(component);
                 }
                 if (iterations[0] >= durationInSeconds) {
@@ -39,7 +42,7 @@ public class ActionBar {
                         cancel();
                         return;
                     }
-                    for (Player player : Bukkit.getOnlinePlayers()) {
+                    for (Player player : players) {
                         player.sendActionBar(component);
                     }
                     secondsLeft--;
