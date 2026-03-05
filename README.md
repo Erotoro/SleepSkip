@@ -128,18 +128,6 @@ messages:
 - Java 17 или выше
 - Gradle 8.8+
 
-### Команды
-```bash
-# Клонирование репозитория
-git clone https://github.com/Erotoro/SleepSkip.git
-cd SleepSkip
-
-# Сборка плагина
-./gradlew build
-
-# Готовый JAR файл будет в build/libs/
-```
-
 ---
 
 ## 📄 Лицензия
