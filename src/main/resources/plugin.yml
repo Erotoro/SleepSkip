@@ -1,7 +1,7 @@
 name: SleepSkip
-version: 1.4
+version: 1.5
 main: me.Erotoro.sleepskip.SleepSkip
-api-version: '1.21.4'
+api-version: '1.21'
 folia-supported: true
 softdepend: [Essentials, CMI]
 authors: [Erotoro]

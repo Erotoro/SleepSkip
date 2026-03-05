@@ -1,9 +1,10 @@
 plugins {
     id 'java'
+    id 'com.gradleup.shadow' version '9.3.1'
 }
 
 group = 'me.Erotoro'
-version = '1.4'
+version = '1.5'
 
 repositories {
     mavenCentral()
@@ -15,10 +16,15 @@ repositories {
         name = "sonatype"
         url = "https://oss.sonatype.org/content/groups/public/"
     }
+    maven {
+        name = "bstats-repo"
+        url = "https://repo.bstats.org/repository/maven-public/"
+    }
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
+    implementation 'org.bstats:bstats-bukkit:3.2.1'
 }
 
 def targetJavaVersion = 21
@@ -46,4 +52,15 @@ processResources {
     filesMatching('plugin.yml') {
         expand props
     }
+}
+
+// Включаем bStats в jar файл
+tasks.shadowJar {
+    archiveClassifier.set('')
+    
+    // Включаем зависимости из runtimeClasspath
+    configurations = [project.configurations.runtimeClasspath]
+
+    // Relocate bStats чтобы избежать конфликтов
+    relocate('org.bstats', 'me.Erotoro.sleepskip.metrics')
 }

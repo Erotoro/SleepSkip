@@ -11,12 +11,15 @@ import org.jetbrains.annotations.NotNull;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Iterator;
 
 public class AFKChecker implements Listener {
 
     private final SleepSkip plugin;
     private final boolean ignoreAfk;
     private final Map<UUID, Long> lastActivity = new HashMap<>();
+    private static final long CLEANUP_INTERVAL = 600000L; // 10 минут в миллисекундах
+    private long lastCleanup = System.currentTimeMillis();
 
     public AFKChecker(@NotNull SleepSkip plugin) {
         this.plugin = plugin;
@@ -44,6 +47,8 @@ public class AFKChecker implements Listener {
     }
 
     public boolean isPlayerAFK(Player player) {
+        if (player == null) return true; // Защита от null
+        
         if (!ignoreAfk) return false; // Если игнорирование AFK отключено, считаем игрока активным
 
         UUID uuid = player.getUniqueId();
@@ -53,13 +58,39 @@ public class AFKChecker implements Listener {
             return false;
         }
 
-        long afkTimeout = plugin.getConfig().getLong("settings.afk-timeout", 300) * 1000; // По умолчанию 300 секунд
-        return System.currentTimeMillis() - lastActivity.get(uuid) > afkTimeout;
+        long afkTimeout = plugin.getConfig().getLong("settings.afk-timeout", 300) * 1000L; // По умолчанию 300 секунд
+        boolean isAfk = System.currentTimeMillis() - lastActivity.get(uuid) > afkTimeout;
+        
+        // Периодическая очистка устаревших записей
+        cleanupOldEntries();
+        
+        return isAfk;
     }
 
     // Метод для обновления активности игрока (вызывается при движении или других действиях)
     public void updatePlayerActivity(Player player) {
+        if (player == null) return; // Защита от null
         if (player.hasMetadata("NPC")) return; // Игнорируем NPC
         lastActivity.put(player.getUniqueId(), System.currentTimeMillis());
+    }
+    
+    // Очистка устаревших записей (для предотвращения утечки памяти)
+    private void cleanupOldEntries() {
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastCleanup < CLEANUP_INTERVAL) {
+            return;
+        }
+        
+        long afkTimeout = plugin.getConfig().getLong("settings.afk-timeout", 300) * 1000L * 2; // Удаляем записи старше 2x timeout
+        Iterator<Map.Entry<UUID, Long>> iterator = lastActivity.entrySet().iterator();
+        
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, Long> entry = iterator.next();
+            if (currentTime - entry.getValue() > afkTimeout) {
+                iterator.remove();
+            }
+        }
+        
+        lastCleanup = currentTime;
     }
 }
