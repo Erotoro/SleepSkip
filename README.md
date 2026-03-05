@@ -78,7 +78,7 @@ messages:
 
 | Команда | Описание | Разрешение |
 |---------|----------|------------|
-| `/sleep` | Лечь спать для пропуска ночи | `sleepskip.sleep` |
+| `/sleep` | Команда для администрации | `sleepskip.sleep` |
 
 ---
 
@@ -150,8 +150,7 @@ cd SleepSkip
 
 ## 🤝 Поддержка
 
-- 💬 **Discord**: [Ваш Discord сервер]
-- 📧 **Email**: [Ваш email]
+- 💬 **Discord**: [Наш дисокрд](https://discord.gg/FMhuu3meH2)
 - 🐛 **Баги и предложения**: [GitHub Issues](https://github.com/Erotoro/SleepSkip/issues)
 
 ---
