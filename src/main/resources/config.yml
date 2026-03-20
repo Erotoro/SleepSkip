@@ -1,0 +1,33 @@
+settings:
+  language: "ru" # ru, en, ua
+  required-type: "percent" # fixed or percent
+  required-value: 50
+
+  ignore-afk: true
+  afk-timeout: 300
+
+  actionbar-duration: 5
+  transition-duration-ticks: 60 # 20 ticks = 1 second
+  skip-rain: true
+  weather-sleep-mode: "thunderstorm" # none, thunderstorm
+  per-world: false
+  use-actionbar: true
+
+# Additional overrides for backward compatibility with versions released prior to localisation.
+# If a key is present here, it takes precedence over the lang/<language>.yml file.
+# Please move any custom messages you have created to lang/<language>.yml (en, ru, ua).
+messages:
+  # nightSkipped: "<#F6AD72>Good morning!"
+  # weatherSkipped: "<#F6AD72>The thunderstorm has passed!"
+  # nightSkipping: "<#F6AD72>Skipping the night..."
+  # weatherSkipping: "<#F6AD72>Sleeping through the thunderstorm..."
+  # sleepingStatus: "<#EC9793>{sleeping}/{needed} players are sleeping. Need <#EC9793>{needed} to skip the night!"
+  # weatherSleepingStatus: "<#EC9793>{sleeping}/{needed} players are sleeping. Need <#EC9793>{needed} to sleep through the thunderstorm!"
+  # not-enough: "<red>Not enough players are sleeping!"
+  # no-permission: "<red>You do not have permission to use this command!"
+  # reload-success: "<green>Config reloaded!"
+  # status-message: "<#F6AD72>SleepSkip is running normally."
+  # help-title: "<gold>=== SleepSkip Commands ==="
+  # help-reload: "<yellow>/sleep reload - Reload config"
+  # help-status: "<yellow>/sleep status - Check plugin status"
+  # help-broadcaststatus: "<yellow>/sleep broadcaststatus - Broadcast plugin status"

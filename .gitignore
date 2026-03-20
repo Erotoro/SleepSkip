@@ -1,0 +1,15 @@
+# Gradle
+.gradle/
+build/
+bin/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+
+# Compiled classes
+**/*.class
+
+# Logs
+*.log

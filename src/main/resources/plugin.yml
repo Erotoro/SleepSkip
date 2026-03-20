@@ -1,0 +1,19 @@
+name: SleepSkip
+version: ${version}
+main: me.Erotoro.sleepskip.SleepSkip
+api-version: '1.21'
+folia-supported: true
+softdepend: [Essentials, CMI, PlaceholderAPI]
+authors: [Erotoro]
+description: Multilingual night skipping plugin
+commands:
+  sleep:
+    description: SleepSkip commands
+    usage: /sleep <reload|status|broadcaststatus>
+permissions:
+  sleepskip.admin:
+    description: Access to SleepSkip admin commands
+    default: op
+  sleepskip.bypass:
+    description: Excludes a player from SleepSkip counters
+    default: false
