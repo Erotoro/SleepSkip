@@ -204,3 +204,8 @@ messages:
 **Версия:** 1.6  
 **Версия Minecraft:** 1.21+  
 **Зависимости:** None (опционально: Essentials, CMI, PlaceholderAPI)
+
+---
+
+Supported me - https://ko-fi.com/erotoro
+Thx <3
