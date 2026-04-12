@@ -12,6 +12,14 @@ public final class ConfigValidator {
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("ru", "en", "ua");
     private static final Set<String> SUPPORTED_REQUIRED_TYPES = Set.of("fixed", "percent");
     private static final Set<String> SUPPORTED_WEATHER_SLEEP_MODES = Set.of("none", "thunderstorm");
+    private static final String LEGACY_THRESHOLD_SKIP_MODE = "threshold_skip";
+    private static final String UNIFIED_START_THRESHOLD_PERCENT_PATH = "sleep.start-threshold-percent";
+    private static final String UNIFIED_MAX_SPEED_MULTIPLIER_PATH = "sleep.max-speed-multiplier";
+    private static final String UNIFIED_UPDATE_INTERVAL_TICKS_PATH = "sleep.update-interval-ticks";
+    private static final String LEGACY_START_THRESHOLD_PERCENT_PATH = "gradual-acceleration.start-threshold-percent";
+    private static final String LEGACY_MAX_SPEED_MULTIPLIER_PATH = "gradual-acceleration.max-speed-multiplier";
+    private static final String LEGACY_UPDATE_INTERVAL_TICKS_PATH = "gradual-acceleration.update-interval-ticks";
+    private static final String LEGACY_ENABLED_PATH = "gradual-acceleration.enabled";
 
     private ConfigValidator() {
     }
@@ -55,6 +63,34 @@ public final class ConfigValidator {
                     "Invalid weather-sleep-mode. Falling back to thunderstorm."
             ));
             config.set("settings.weather-sleep-mode", "thunderstorm");
+            changed = true;
+        }
+
+        if (migrateLegacyNightBehaviorConfig(plugin, config)) {
+            changed = true;
+        }
+
+        double startThresholdPercent = config.getDouble(UNIFIED_START_THRESHOLD_PERCENT_PATH, 50D);
+        double normalizedStartThresholdPercent = Math.max(0D, Math.min(100D, startThresholdPercent));
+        if (Double.compare(startThresholdPercent, normalizedStartThresholdPercent) != 0) {
+            plugin.getLogger().warning("sleep.start-threshold-percent must be between 0 and 100.");
+            config.set(UNIFIED_START_THRESHOLD_PERCENT_PATH, normalizedStartThresholdPercent);
+            changed = true;
+        }
+
+        double maxSpeedMultiplier = config.getDouble(UNIFIED_MAX_SPEED_MULTIPLIER_PATH, 12D);
+        double normalizedMaxSpeedMultiplier = Math.max(1D, maxSpeedMultiplier);
+        if (Double.compare(maxSpeedMultiplier, normalizedMaxSpeedMultiplier) != 0) {
+            plugin.getLogger().warning("sleep.max-speed-multiplier must be at least 1.");
+            config.set(UNIFIED_MAX_SPEED_MULTIPLIER_PATH, normalizedMaxSpeedMultiplier);
+            changed = true;
+        }
+
+        long updateIntervalTicks = config.getLong(UNIFIED_UPDATE_INTERVAL_TICKS_PATH, 5L);
+        long normalizedUpdateIntervalTicks = Math.max(1L, updateIntervalTicks);
+        if (updateIntervalTicks != normalizedUpdateIntervalTicks) {
+            plugin.getLogger().warning("sleep.update-interval-ticks must be at least 1.");
+            config.set(UNIFIED_UPDATE_INTERVAL_TICKS_PATH, normalizedUpdateIntervalTicks);
             changed = true;
         }
 
@@ -128,5 +164,50 @@ public final class ConfigValidator {
             }
         }
         return fallback.toLowerCase();
+    }
+
+    private static boolean migrateLegacyNightBehaviorConfig(SleepSkip plugin, FileConfiguration config) {
+        boolean changed = false;
+
+        boolean hasUnifiedStartThreshold = config.contains(UNIFIED_START_THRESHOLD_PERCENT_PATH);
+        boolean hasUnifiedMaxSpeed = config.contains(UNIFIED_MAX_SPEED_MULTIPLIER_PATH);
+        boolean hasUnifiedUpdateInterval = config.contains(UNIFIED_UPDATE_INTERVAL_TICKS_PATH);
+
+        String legacyMode = normalizedString(config, "settings.night-behavior", LEGACY_THRESHOLD_SKIP_MODE);
+        boolean legacyAccelerationEnabled = config.getBoolean(LEGACY_ENABLED_PATH, true);
+        boolean legacyConfigPresent = config.contains("settings.night-behavior")
+                || config.contains("gradual-acceleration");
+
+        if (!hasUnifiedStartThreshold) {
+            double migratedStartThreshold;
+            if (LEGACY_THRESHOLD_SKIP_MODE.equals(legacyMode) || !legacyAccelerationEnabled) {
+                migratedStartThreshold = 100D;
+            } else {
+                migratedStartThreshold = config.getDouble(LEGACY_START_THRESHOLD_PERCENT_PATH, 50D);
+            }
+            config.set(UNIFIED_START_THRESHOLD_PERCENT_PATH, migratedStartThreshold);
+            changed = true;
+        }
+
+        if (!hasUnifiedMaxSpeed) {
+            config.set(UNIFIED_MAX_SPEED_MULTIPLIER_PATH, config.getDouble(LEGACY_MAX_SPEED_MULTIPLIER_PATH, 12D));
+            changed = true;
+        }
+
+        if (!hasUnifiedUpdateInterval) {
+            config.set(UNIFIED_UPDATE_INTERVAL_TICKS_PATH, config.getLong(LEGACY_UPDATE_INTERVAL_TICKS_PATH, 5L));
+            changed = true;
+        }
+
+        if (legacyConfigPresent) {
+            plugin.getLogger().warning(
+                    "settings.night-behavior and gradual-acceleration.* are deprecated. Migrated to sleep.* unified model."
+            );
+            config.set("settings.night-behavior", null);
+            config.set("gradual-acceleration", null);
+            changed = true;
+        }
+
+        return changed;
     }
 }

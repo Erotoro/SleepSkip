@@ -17,6 +17,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -33,6 +34,7 @@ public class PlayerStateService implements Listener {
     private final AFKChecker afkChecker;
     private final ExternalPluginHooks externalPluginHooks;
     private final ConcurrentHashMap<UUID, PlayerStateSnapshot> snapshots = new ConcurrentHashMap<>();
+    private final Set<UUID> bukkitOnlineIdsScratch = new HashSet<>();
     private final ConcurrentHashMap<UUID, ScheduledTask> foliaTasks = new ConcurrentHashMap<>();
     private BukkitTask bukkitRefreshTask;
 
@@ -120,10 +122,13 @@ public class PlayerStateService implements Listener {
     }
 
     private void refreshAllBukkitPlayers() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
+        bukkitOnlineIdsScratch.clear();
+        Collection<? extends Player> onlinePlayers = Bukkit.getOnlinePlayers();
+        for (Player player : onlinePlayers) {
+            bukkitOnlineIdsScratch.add(player.getUniqueId());
             refreshSnapshot(player);
         }
-        snapshots.keySet().retainAll(Bukkit.getOnlinePlayers().stream().map(Player::getUniqueId).collect(java.util.stream.Collectors.toSet()));
+        snapshots.keySet().retainAll(bukkitOnlineIdsScratch);
     }
 
     private void scheduleFoliaRefresh(Player player) {
@@ -149,6 +154,9 @@ public class PlayerStateService implements Listener {
             return;
         }
 
+        boolean ignoreAfk = plugin.getConfig().getBoolean("settings.ignore-afk", true);
+        boolean localAfk = afkChecker.isPlayerAFK(player);
+        boolean externalAfk = externalPluginHooks.isAfk(player);
         World world = player.getWorld();
         snapshots.put(player.getUniqueId(), new PlayerStateSnapshot(
                 player.getUniqueId(),
@@ -158,9 +166,16 @@ public class PlayerStateService implements Listener {
                 player.getGameMode() == GameMode.SPECTATOR,
                 player.hasMetadata("NPC"),
                 externalPluginHooks.isVanished(player),
-                afkChecker.isPlayerAFK(player) || externalPluginHooks.isAfk(player),
+                resolveAfkFlag(ignoreAfk, localAfk, externalAfk),
                 player.isSleeping()
         ));
+    }
+
+    static boolean resolveAfkFlag(boolean ignoreAfk, boolean localAfk, boolean externalAfk) {
+        if (!ignoreAfk) {
+            return false;
+        }
+        return localAfk || externalAfk;
     }
 
     private void removePlayer(UUID playerId) {

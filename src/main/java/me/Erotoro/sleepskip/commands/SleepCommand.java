@@ -40,10 +40,10 @@ public class SleepCommand implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("reload")) {
+            plugin.getSleepListener().resetRuntimeState();
             plugin.reloadConfig();
             ConfigValidator.validate(plugin);
             plugin.getLocaleManager().reload();
-            plugin.getSleepListener().invalidateAllCaches();
             sender.sendMessage(miniMessage.deserialize(plugin.tr(
                     "messages.reload-success",
                     "<green>Config reloaded!"

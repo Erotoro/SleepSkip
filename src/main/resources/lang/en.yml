@@ -1,8 +1,10 @@
-messages:
+﻿messages:
   nightSkipped: "<#F6AD72>Good morning!"
   weatherSkipped: "<#F6AD72>The thunderstorm has passed!"
   nightSkipping: "<#F6AD72>Skipping the night..."
+  nightSkippingCancelled: "<#F6AD72>Night skip cancelled."
   weatherSkipping: "<#F6AD72>Sleeping through the thunderstorm..."
+  weatherSkippingCancelled: "<#7DD3FC>Storm skip cancelled."
   sleepingStatus: "<#EC9793>{sleeping}/{needed} players are sleeping. Need <#EC9793>{needed} to skip the night!"
   weatherSleepingStatus: "<#EC9793>{sleeping}/{needed} players are sleeping. Need <#EC9793>{needed} to sleep through the thunderstorm!"
   not-enough: "<red>Not enough players are sleeping!"
@@ -13,6 +15,16 @@ messages:
   help-reload: "<yellow>/sleep reload - Reload config"
   help-status: "<yellow>/sleep status - Check plugin status"
   help-broadcaststatus: "<yellow>/sleep broadcaststatus - Broadcast plugin status"
+  overlay-night-title: "<#F6AD72>Night"
+  overlay-night-subtitle: "<#EC9793>{sleeping}/{needed} asleep В· {remaining} more needed"
+  overlay-weather-title: "<#7DD3FC>Storm"
+  overlay-weather-subtitle: "<#BAE6FD>{sleeping}/{needed} resting В· {remaining} more needed"
+  overlay-transition-night-title: "<#F6AD72>Dawn"
+  overlay-transition-night-subtitle: "<#EC9793>Night passing В· {progress}%"
+  overlay-transition-weather-title: "<#7DD3FC>Clear skies"
+  overlay-transition-weather-subtitle: "<#BAE6FD>Storm passing В· {progress}%"
+  overlay-acceleration-night-title: "<#F6AD72>Night accelerating"
+  overlay-acceleration-night-subtitle: "<#EC9793>{sleeping}/{needed} asleep В· speed {speed}"
 plugin:
   command-description: "SleepSkip commands"
   command-usage: "/sleep <reload|status|broadcaststatus>"

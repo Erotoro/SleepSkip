@@ -11,7 +11,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Minimal action bar sender with keyed task replacement.
@@ -19,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ActionBar {
     private static final long RESEND_PERIOD_TICKS = 20L;
     private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
-    private static final ConcurrentHashMap<String, PlatformScheduler.TaskHandle> ACTIVE_TASKS = new ConcurrentHashMap<>();
+    private static final ActionBarTaskRegistry TASK_REGISTRY = new ActionBarTaskRegistry();
 
     private ActionBar() {
     }
@@ -38,41 +37,29 @@ public final class ActionBar {
             return;
         }
 
-        PlatformScheduler.TaskHandle previous = ACTIVE_TASKS.remove(key);
-        if (previous != null) {
-            previous.cancel();
-        }
-
         Component component = MINI_MESSAGE.deserialize(message);
         Set<UUID> playerIds = Set.copyOf(recipients);
         int repeatCount = Math.max(1, durationInSeconds);
         final int[] remainingRepeats = {repeatCount};
+        Object taskIdentity = new Object();
 
         PlatformScheduler.TaskHandle handle = PlatformScheduler.runGlobalAtFixedRate(plugin, () -> {
             sendToPlayers(plugin, playerIds, component);
             remainingRepeats[0]--;
             if (remainingRepeats[0] <= 0) {
-                PlatformScheduler.TaskHandle current = ACTIVE_TASKS.remove(key);
-                if (current != null) {
-                    current.cancel();
-                }
+                TASK_REGISTRY.completeIfCurrent(key, taskIdentity);
             }
         }, 1L, RESEND_PERIOD_TICKS);
 
-        ACTIVE_TASKS.put(key, handle);
+        TASK_REGISTRY.replaceTask(key, taskIdentity, handle);
     }
 
     public static void cancelKey(String key) {
-        PlatformScheduler.TaskHandle handle = ACTIVE_TASKS.remove(key);
-        if (handle != null) {
-            handle.cancel();
-        }
+        TASK_REGISTRY.cancelKey(key);
     }
 
-    public static void cancelCurrentTask(SleepSkip plugin) {
-        for (String key : Set.copyOf(ACTIVE_TASKS.keySet())) {
-            cancelKey(key);
-        }
+    public static void cancelCurrentTask() {
+        TASK_REGISTRY.cancelAll();
     }
 
     private static void sendToPlayers(SleepSkip plugin, Collection<UUID> recipients, Component component) {

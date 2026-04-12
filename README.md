@@ -1,211 +1,137 @@
 ![Platform](https://img.shields.io/badge/platform-Paper%20%7C%20Spigot%20%7C%20Folia-green.svg)
 ![Java](https://img.shields.io/badge/java-21%2B-orange.svg)
-![Version minecraft](https://img.shields.io/badge/Version_Minecraft_1.21+-red.svg)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.21%2B-red.svg)
 [![Support me](https://img.shields.io/badge/Support%20me-Ko--fi-ff5f5f?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/erotoro)
 
-# 🌙 SleepSkip
+# SleepSkip
 
-**SleepSkip** - плагин для Minecraft, который позволяет пропускать ночь, когда достаточное количество игроков спит. Поддерживает серверы **Paper**, **Spigot** и **Folia**.
+SleepSkip is a Minecraft plugin for Paper/Spigot/Folia that skips night when enough players are sleeping, supports thunderstorm daytime sleep, and provides a clean overlay/action bar UX.
 
----
+## Features
 
-## ✨ Особенности
+- Night skip with `fixed` or `percent` requirement model
+- Unified sleep flow: `IDLE -> ACCELERATING -> FULL_SKIP`
+- Smooth transition to morning
+- Per-world counters
+- AFK-aware counting with Essentials/CMI hooks
+- Thunderstorm-only daytime sleep (`weather-sleep-mode: thunderstorm`)
+- Overlay + ActionBar status/progress UI
+- PlaceholderAPI integration
+- Locales: `en`, `ru`, `ua`
 
-- 🌙 **Пропуск ночи** - когда нужное количество игроков спит, ночь пропускается
-- ⏱️ **Плавный переход** - плавный рассвет вместо мгновенной смены времени
-- 🌍 **Per-World режим** - настройка пропуска для каждого мира отдельно
-- 📊 **Гибкие настройки** - фиксированное число или процент спящих игроков
-- 🚶 **AFK обнаружение** - возможность игнорировать AFK игроков при подсчёте
-- 🌩️ **Погода ближе к ваниле** - ночью дождь и гроза пропускаются вместе с ночью, днём спать можно только во время грозы
-- 💬 **Красивые сообщения** - поддержка RGB-цветов и MiniMessage
-- 🌐 **Локализация** - поддержка `ru`, `en`, `ua`
-- 🔌 **Интеграции** - Essentials, CMI и PlaceholderAPI
-- 📈 **bStats метрики** - статистика использования плагина
+## Installation
 
----
+1. Download the latest release from [Releases](https://github.com/Erotoro/SleepSkip/releases)
+2. Put `SleepSkip-1.7.jar` into your server `plugins` folder
+3. Restart the server
+4. Configure `plugins/SleepSkip/config.yml`
 
-## 📥 Установка
-
-1. Скачайте последнюю версию плагина из раздела [Releases](https://github.com/Erotoro/SleepSkip/releases)
-2. Поместите файл `SleepSkip-1.6.jar` в папку `plugins` вашего сервера
-3. Перезапустите сервер
-4. Настройте плагин в файле `plugins/SleepSkip/config.yml`
-
----
-
-## ⚙️ Конфигурация
-
-### `config.yml`
+## Default config (`config.yml`)
 
 ```yaml
-# Настройки плагина
 settings:
-  language: "ru" # ru, en, ua
+  language: "en" # en, ru, ua
+  required-type: "percent" # fixed or percent
+  required-value: 60
 
-  # Тип требуемого количества: "fixed" (фиксированное) или "percent" (процент)
-  required-type: "percent"
-
-  # Значение: количество игроков (для fixed) или процент (для percent)
-  required-value: 50
-
-  # Игнорировать AFK игроков при подсчёте
   ignore-afk: true
-
-  # Таймаут AFK в секундах для встроенной проверки
   afk-timeout: 300
+  count-afk-sleepers: true
+  overlay-enabled: true
 
-  # Длительность сообщений в ActionBar
   actionbar-duration: 5
-
-  # Длительность плавного перехода в тиках
-  transition-duration-ticks: 60
-
-  # Убирать дождь и грозу после skip
+  transition-duration-ticks: 60 # 20 ticks = 1 second
   skip-rain: true
-
-  # Режим weather sleep: "none" или "thunderstorm"
-  # Днём спать можно только во время грозы
-  weather-sleep-mode: "thunderstorm"
-
-  # Считать спящих игроков для каждого мира отдельно
+  weather-sleep-mode: "thunderstorm" # none, thunderstorm
   per-world: false
-
-  # Использовать ActionBar для сообщений
   use-actionbar: true
 
-# Дополнительные overrides для обратной совместимости.
-# Если ключ указан здесь, он будет иметь приоритет над lang/<language>.yml
-messages:
-  # nightSkipped: "<#F6AD72>Доброе утро!"
-  # weatherSkipped: "<#F6AD72>Гроза закончилась!"
-  # nightSkipping: "<#F6AD72>Ночь пропускается..."
-  # weatherSkipping: "<#F6AD72>Игроки спят, чтобы переждать грозу..."
-  # sleepingStatus: "<#EC9793>{sleeping}/{needed} игроков спит. Нужно <#EC9793>{needed} для пропуска ночи!"
-  # weatherSleepingStatus: "<#EC9793>{sleeping}/{needed} игроков спит. Нужно <#EC9793>{needed} чтобы переждать грозу!"
-  # not-enough: "<red>Недостаточно игроков спит!"
-  # no-permission: "<red>У вас нет прав для использования этой команды!"
-  # reload-success: "<green>Конфиг перезагружен!"
-  # status-message: "<#F6AD72>Плагин SleepSkip работает корректно."
-  # help-title: "<gold>=== SleepSkip Команды ==="
-  # help-reload: "<yellow>/sleep reload - Перезагрузить конфиг"
-  # help-status: "<yellow>/sleep status - Проверить статус плагина"
-  # help-broadcaststatus: "<yellow>/sleep broadcaststatus - Показать статус всем игрокам"
+sleep:
+  start-threshold-percent: 5
+  max-speed-multiplier: 12.0
+  update-interval-ticks: 5
+
+overlay:
+  enabled: true
+  mode: "title"
+  update-interval-ticks: 10
+  fade-in-ticks: 1
+  stay-ticks: 24
+  fade-out-ticks: 1
+  show-status-before-skip: true
+  show-progress-during-transition: true
+
+placeholders:
+  offline-mode: "none" # none, global, fallback-world
+  fallback-world: ""
 ```
 
-### Локализация
+## Commands
 
-Основные сообщения теперь находятся в:
+- `/sleep reload`
+- `/sleep status`
+- `/sleep broadcaststatus`
 
-- `plugins/SleepSkip/lang/ru.yml`
-- `plugins/SleepSkip/lang/en.yml`
-- `plugins/SleepSkip/lang/ua.yml`
+Permission: `sleepskip.admin`
 
-Если вы обновляетесь со старой версии, можно по-прежнему переопределять `messages.*` через `config.yml`.
+## Extra permissions
 
----
+- `sleepskip.bypass` - player is excluded from sleep counters
 
-## 🎮 Команды
-
-| Команда | Описание | Разрешение |
-|---------|----------|------------|
-| `/sleep reload` | Перезагрузить конфиг и локализацию | `sleepskip.admin` |
-| `/sleep status` | Показать статус только отправителю | `sleepskip.admin` |
-| `/sleep broadcaststatus` | Показать статус всем игрокам | `sleepskip.admin` |
-
----
-
-## 🔧 Разрешения (Permissions)
-
-| Разрешение | Описание | По умолчанию |
-|------------|----------|--------------|
-| `sleepskip.admin` | Доступ к админ-командам | `op` |
-| `sleepskip.bypass` | Игрок не учитывается в sleep counters | `false` |
-
----
-
-## 🔌 PlaceholderAPI
-
-Если установлен **PlaceholderAPI**, становятся доступны placeholders:
+## PlaceholderAPI
 
 - `%sleepskip_sleeping%`
 - `%sleepskip_needed%`
 - `%sleepskip_active_players%`
 - `%sleepskip_world%`
 
----
+## Version 1.7 (current)
 
-## 🌩️ Правила сна и погоды
+- Unified night model (`IDLE -> ACCELERATING -> FULL_SKIP`)
+- New public config block `sleep.*`
+- Legacy migration from `settings.night-behavior` and `gradual-acceleration.*`
+- Improved locale fallback handling for corrupted locale files
 
-Текущее поведение сделано ближе к ваниле:
+## Russian (RU)
 
-- **Ночь + ясная погода** - обычный пропуск ночи
-- **Ночь + дождь** - обычный пропуск ночи
-- **Ночь + гроза** - обычный пропуск ночи
-- **День + гроза** - игроки могут спать, чтобы переждать грозу
-- **День + обычный дождь** - спать нельзя
+SleepSkip — плагин для Minecraft (Paper/Spigot/Folia), который пропускает ночь при достаточном количестве спящих игроков, поддерживает сон днём во время грозы и показывает статус через Overlay/ActionBar.
 
----
+### Основные возможности
 
-## 📊 bStats Метрики
+- Пропуск ночи по модели `fixed` или `percent`
+- Единая логика сна: `IDLE -> ACCELERATING -> FULL_SKIP`
+- Плавный переход к утру
+- Поддержка per-world подсчёта
+- Учёт AFK и интеграции Essentials/CMI
+- Сон днём только во время грозы
+- PlaceholderAPI
+- Локали: `en`, `ru`, `ua`
 
-Этот плагин использует **bStats** для сбора анонимной статистики использования:
+### Установка
 
-- Тип сервера (Folia/Paper/Spigot)
-- Количество пропущенных ночей
-- Настройки конфигурации
+1. Скачайте последнюю версию из [Releases](https://github.com/Erotoro/SleepSkip/releases)
+2. Поместите `SleepSkip-1.7.jar` в папку `plugins`
+3. Перезапустите сервер
+4. Настройте `plugins/SleepSkip/config.yml`
 
-Данные помогают улучшать плагин. Если вы хотите отключить метрики, установите `enabled: false` в `plugins/bStats/config.yml`.
+### Команды
 
----
+- `/sleep reload`
+- `/sleep status`
+- `/sleep broadcaststatus`
 
-## 🔄 История версий
+Права: `sleepskip.admin`, `sleepskip.bypass`
 
-### Версия 1.6 (Текущая)
-- ✨ Полностью обновлена логика сна и погоды
-- ✨ Реальная поддержка Folia-safe scheduling
-- ✨ Поддержка daytime sleep во время грозы
-- ✨ PlaceholderAPI placeholders
-- ✨ Локализация `ru`, `en`, `ua`
-- 🔧 Улучшены hooks для Essentials и CMI
-- 🔧 Добавлены `sleepskip.bypass` и новые admin-команды
-- 🔧 Улучшены ActionBar, статус-кэш и совместимость со старыми конфигами
+## Support
 
-### Версия 1.5
-- ✨ Плавный переход от ночи к утру
-- ✨ Новое сообщение `nightSkipping` при начале перехода
-- 🔧 Поддержка современных версий сервера
-- 🔧 Улучшена синхронизация и обработка событий
+- Discord: [Наш Discord](https://discord.gg/FMhuu3meH2)
+- Issues: [GitHub Issues](https://github.com/Erotoro/SleepSkip/issues)
 
-### Версия 1.4
-- Добавлена поддержка MiniMessage для форматирования сообщений
-- Улучшена совместимость с современными версиями Minecraft
-
-### Версия 1.3
-- Добавлена возможность игнорировать AFK игроков
-- Добавлен режим per-world для независимого подсчёта в каждом мире
-
----
-
-## 📄 Лицензия
-
-Этот проект распространяется под лицензией **MIT**.
-
----
-
-## 🤝 Поддержка
-
-- 💬 **Discord**: [Наш Discord](https://discord.gg/FMhuu3meH2)
-- 🐛 **Баги и предложения**: [GitHub Issues](https://github.com/Erotoro/SleepSkip/issues)
-
----
-
-## 📈 Статистика
+## bStats
 
 [![bStats](https://bstats.org/signatures/bukkit/SleepSkip.svg)](https://bstats.org/plugin/bukkit/SleepSkip/29936)
 
----
-
-**Автор:** Erotoro  
-**Версия:** 1.6  
-**Версия Minecraft:** 1.21+  
-**Зависимости:** None (опционально: Essentials, CMI, PlaceholderAPI)
+Author: Erotoro  
+Version: 1.7  
+Minecraft: 1.21+  
+Dependencies: none (optional: Essentials, CMI, PlaceholderAPI)

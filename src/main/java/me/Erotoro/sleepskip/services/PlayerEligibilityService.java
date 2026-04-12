@@ -7,16 +7,34 @@ import java.util.UUID;
  */
 public class PlayerEligibilityService {
 
-    public boolean shouldCountAsActive(PlayerStateSnapshot snapshot, UUID targetWorldId, boolean perWorld) {
+    public boolean shouldCountAsActive(
+            PlayerStateSnapshot snapshot,
+            UUID targetWorldId,
+            boolean perWorld,
+            boolean ignoreAfk
+    ) {
         if (!passesCommonChecks(snapshot, targetWorldId, perWorld)) {
             return false;
         }
 
-        return !snapshot.afk();
+        return !ignoreAfk || !snapshot.afk();
     }
 
-    public boolean shouldCountAsSleeping(PlayerStateSnapshot snapshot, UUID targetWorldId, boolean perWorld) {
-        return passesCommonChecks(snapshot, targetWorldId, perWorld);
+    public boolean shouldCountAsSleeping(
+            PlayerStateSnapshot snapshot,
+            UUID targetWorldId,
+            boolean perWorld,
+            boolean countAfkSleepers,
+            boolean ignoreAfk
+    ) {
+        if (!passesCommonChecks(snapshot, targetWorldId, perWorld)) {
+            return false;
+        }
+
+        if (!ignoreAfk) {
+            return true;
+        }
+        return countAfkSleepers || !snapshot.afk();
     }
 
     private boolean passesCommonChecks(PlayerStateSnapshot snapshot, UUID targetWorldId, boolean perWorld) {

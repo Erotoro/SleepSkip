@@ -1,10 +1,12 @@
 settings:
-  language: "ru" # ru, en, ua
+  language: "en" # en, ru, ua
   required-type: "percent" # fixed or percent
-  required-value: 50
+  required-value: 60
 
   ignore-afk: true
   afk-timeout: 300
+  count-afk-sleepers: true
+  overlay-enabled: true
 
   actionbar-duration: 5
   transition-duration-ticks: 60 # 20 ticks = 1 second
@@ -12,6 +14,25 @@ settings:
   weather-sleep-mode: "thunderstorm" # none, thunderstorm
   per-world: false
   use-actionbar: true
+
+sleep:
+  start-threshold-percent: 5
+  max-speed-multiplier: 12.0
+  update-interval-ticks: 5
+
+overlay:
+  enabled: true
+  mode: "title"
+  update-interval-ticks: 10
+  fade-in-ticks: 1
+  stay-ticks: 24
+  fade-out-ticks: 1
+  show-status-before-skip: true
+  show-progress-during-transition: true
+
+placeholders:
+  offline-mode: "none" # none, global, fallback-world
+  fallback-world: ""
 
 # Additional overrides for backward compatibility with versions released prior to localisation.
 # If a key is present here, it takes precedence over the lang/<language>.yml file.

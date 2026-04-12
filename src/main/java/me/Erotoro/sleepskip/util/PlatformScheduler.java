@@ -22,12 +22,14 @@ public final class PlatformScheduler {
         Bukkit.getScheduler().runTask(plugin, runnable);
     }
 
-    public static void runGlobalDelayed(SleepSkip plugin, Runnable runnable, long delayTicks) {
+    public static TaskHandle runGlobalDelayed(SleepSkip plugin, Runnable runnable, long delayTicks) {
         if (plugin.isFolia()) {
-            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> runnable.run(), delayTicks);
-            return;
+            ScheduledTask task = Bukkit.getGlobalRegionScheduler().runDelayed(plugin, scheduledTask -> runnable.run(), delayTicks);
+            return task::cancel;
         }
-        Bukkit.getScheduler().runTaskLater(plugin, runnable, delayTicks);
+
+        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, runnable, delayTicks);
+        return task::cancel;
     }
 
     public static TaskHandle runGlobalAtFixedRate(SleepSkip plugin, Runnable runnable, long delayTicks, long periodTicks) {

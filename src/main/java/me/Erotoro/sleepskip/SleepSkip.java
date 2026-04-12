@@ -6,6 +6,7 @@ import me.Erotoro.sleepskip.commands.SleepTabCompleter;
 import me.Erotoro.sleepskip.hooks.ExternalPluginHooks;
 import me.Erotoro.sleepskip.listeners.SleepListener;
 import me.Erotoro.sleepskip.placeholders.SleepSkipPlaceholderExpansion;
+import me.Erotoro.sleepskip.services.SleepOverlayService;
 import me.Erotoro.sleepskip.services.PlayerStateService;
 import me.Erotoro.sleepskip.utils.ActionBar;
 import org.bukkit.Bukkit;
@@ -28,6 +29,7 @@ public class SleepSkip extends JavaPlugin {
     private LocaleManager localeManager;
     private ExternalPluginHooks externalPluginHooks;
     private PlayerStateService playerStateService;
+    private SleepOverlayService sleepOverlayService;
     private SleepListener sleepListener;
     private boolean folia;
     private Metrics metrics;
@@ -50,9 +52,10 @@ public class SleepSkip extends JavaPlugin {
         externalPluginHooks.logConflicts();
         playerStateService = new PlayerStateService(this, afkChecker, externalPluginHooks);
         playerStateService.start();
+        sleepOverlayService = new SleepOverlayService(this);
 
         registerCommand();
-        sleepListener = new SleepListener(this, playerStateService);
+        sleepListener = new SleepListener(this, playerStateService, sleepOverlayService);
         Bukkit.getPluginManager().registerEvents(sleepListener, this);
         registerPlaceholderExpansion();
 
@@ -61,7 +64,13 @@ public class SleepSkip extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        ActionBar.cancelCurrentTask(this);
+        ActionBar.cancelCurrentTask();
+        if (sleepListener != null) {
+            sleepListener.shutdownActiveSkipSessions();
+        }
+        if (sleepOverlayService != null) {
+            sleepOverlayService.stopAll();
+        }
         if (playerStateService != null) {
             playerStateService.stop();
         }
@@ -155,3 +164,4 @@ public class SleepSkip extends JavaPlugin {
         }
     }
 }
+

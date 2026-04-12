@@ -46,13 +46,14 @@ public class SleepSkipPlaceholderExpansion extends PlaceholderExpansion {
             return "";
         }
 
+        String normalizedParams = params.toLowerCase();
         World world = resolveWorld(offlinePlayer);
         if (world == null) {
-            return "";
+            return getUnavailableValue(normalizedParams);
         }
 
         SleepListener.SleepStatus status = listener.getSleepStatus(world);
-        return switch (params.toLowerCase()) {
+        return switch (normalizedParams) {
             case "sleeping" -> Integer.toString(status.sleepingPlayers());
             case "needed" -> Integer.toString(status.requiredPlayers());
             case "active_players" -> Integer.toString(status.activePlayers());
@@ -66,10 +67,43 @@ public class SleepSkipPlaceholderExpansion extends PlaceholderExpansion {
             return player.getWorld();
         }
 
-        // Offline lookups may not have player context.
+        String offlineMode = plugin.getConfig().getString("placeholders.offline-mode", "none");
+        String normalizedMode = offlineMode == null ? "none" : offlineMode.trim().toLowerCase();
+
+        if ("fallback-world".equals(normalizedMode)) {
+            return resolveConfiguredFallbackWorld();
+        }
+        if ("global".equals(normalizedMode)) {
+            return resolveGlobalWorld();
+        }
+        if ("none".equals(normalizedMode)) {
+            return null;
+        }
+
+        // Unknown mode is treated as conservative "none".
+        return null;
+    }
+
+    private World resolveConfiguredFallbackWorld() {
+        String fallbackWorldName = plugin.getConfig().getString("placeholders.fallback-world", "");
+        if (fallbackWorldName == null || fallbackWorldName.isBlank()) {
+            return null;
+        }
+        return plugin.getServer().getWorld(fallbackWorldName);
+    }
+
+    private World resolveGlobalWorld() {
         return plugin.getServer().getWorlds().stream()
                 .filter(world -> world.getEnvironment() == World.Environment.NORMAL)
                 .findFirst()
                 .orElse(plugin.getServer().getWorlds().isEmpty() ? null : plugin.getServer().getWorlds().getFirst());
+    }
+
+    private String getUnavailableValue(String params) {
+        return switch (params) {
+            case "world" -> "N/A";
+            case "sleeping", "needed", "active_players" -> "N/A";
+            default -> "";
+        };
     }
 }
