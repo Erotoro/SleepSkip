@@ -12,6 +12,7 @@ settings:
   transition-duration-ticks: 60 # 20 ticks = 1 second
   skip-rain: true
   weather-sleep-mode: "thunderstorm" # none, thunderstorm
+  daytime-ticks: 0
   per-world: false
   use-actionbar: true
 
@@ -29,6 +30,29 @@ overlay:
   fade-out-ticks: 1
   show-status-before-skip: true
   show-progress-during-transition: true
+
+day-counter:
+  enabled: true
+  show-to-all: true
+  announce-natural-sunrise: true
+  fade-in-ticks: 10
+  stay-ticks: 50
+  fade-out-ticks: 20
+  # Leave empty to use the active locale file.
+  title-format: ""
+  subtitle-format: ""
+  animation:
+    enabled: false
+    mode: "typewriter" # static, typewriter
+    step-interval-ticks: 2
+    final-hold-ticks: 30
+  sound:
+    enabled: false
+    type: "BLOCK_TRIPWIRE_CLICK_ON"
+    volume: 0.7
+    pitch: 1.35
+    play-on-each-step: true
+    play-on-finish: true
 
 placeholders:
   offline-mode: "none" # none, global, fallback-world

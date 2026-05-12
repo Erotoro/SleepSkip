@@ -57,6 +57,7 @@ public class SleepSkipPlaceholderExpansion extends PlaceholderExpansion {
             case "sleeping" -> Integer.toString(status.sleepingPlayers());
             case "needed" -> Integer.toString(status.requiredPlayers());
             case "active_players" -> Integer.toString(status.activePlayers());
+            case "day_count" -> Integer.toString(plugin.getDayCounterService().getDayCount(world));
             case "world" -> world.getName();
             default -> null;
         };
@@ -102,7 +103,7 @@ public class SleepSkipPlaceholderExpansion extends PlaceholderExpansion {
     private String getUnavailableValue(String params) {
         return switch (params) {
             case "world" -> "N/A";
-            case "sleeping", "needed", "active_players" -> "N/A";
+            case "sleeping", "needed", "active_players", "day_count" -> "N/A";
             default -> "";
         };
     }

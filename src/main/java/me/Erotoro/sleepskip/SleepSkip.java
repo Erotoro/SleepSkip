@@ -5,17 +5,25 @@ import me.Erotoro.sleepskip.commands.SleepCommand;
 import me.Erotoro.sleepskip.commands.SleepTabCompleter;
 import me.Erotoro.sleepskip.hooks.ExternalPluginHooks;
 import me.Erotoro.sleepskip.listeners.SleepListener;
+import me.Erotoro.sleepskip.services.DayCounterService;
+import me.Erotoro.sleepskip.services.MorningAnnouncementService;
 import me.Erotoro.sleepskip.placeholders.SleepSkipPlaceholderExpansion;
 import me.Erotoro.sleepskip.services.SleepOverlayService;
 import me.Erotoro.sleepskip.services.PlayerStateService;
+import me.Erotoro.sleepskip.services.TitleSessionCoordinator;
 import me.Erotoro.sleepskip.utils.ActionBar;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.SimplePie;
 import org.bstats.charts.SingleLineChart;
 
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -30,6 +38,9 @@ public class SleepSkip extends JavaPlugin {
     private ExternalPluginHooks externalPluginHooks;
     private PlayerStateService playerStateService;
     private SleepOverlayService sleepOverlayService;
+    private MorningAnnouncementService morningAnnouncementService;
+    private DayCounterService dayCounterService;
+    private TitleSessionCoordinator titleSessionCoordinator;
     private SleepListener sleepListener;
     private boolean folia;
     private Metrics metrics;
@@ -39,6 +50,7 @@ public class SleepSkip extends JavaPlugin {
         folia = isFoliaServer();
 
         saveDefaultConfig();
+        mergeBundledConfigDefaultsForReload();
         localeManager = new LocaleManager(this);
         ConfigValidator.validate(this);
         localeManager.reload();
@@ -52,6 +64,10 @@ public class SleepSkip extends JavaPlugin {
         externalPluginHooks.logConflicts();
         playerStateService = new PlayerStateService(this, afkChecker, externalPluginHooks);
         playerStateService.start();
+        titleSessionCoordinator = new TitleSessionCoordinator();
+        morningAnnouncementService = new MorningAnnouncementService(this);
+        dayCounterService = new DayCounterService(this);
+        dayCounterService.reload();
         sleepOverlayService = new SleepOverlayService(this);
 
         registerCommand();
@@ -70,6 +86,12 @@ public class SleepSkip extends JavaPlugin {
         }
         if (sleepOverlayService != null) {
             sleepOverlayService.stopAll();
+        }
+        if (morningAnnouncementService != null) {
+            morningAnnouncementService.stop();
+        }
+        if (dayCounterService != null) {
+            dayCounterService.stop();
         }
         if (playerStateService != null) {
             playerStateService.stop();
@@ -133,6 +155,50 @@ public class SleepSkip extends JavaPlugin {
 
     public PlayerStateService getPlayerStateService() {
         return playerStateService;
+    }
+
+    public void mergeBundledConfigDefaultsForReload() {
+        try (InputStream resource = getResource("config.yml")) {
+            if (resource == null) {
+                return;
+            }
+
+            YamlConfiguration bundledConfig = YamlConfiguration.loadConfiguration(
+                    new InputStreamReader(resource, StandardCharsets.UTF_8)
+            );
+            FileConfiguration currentConfig = getConfig();
+
+            boolean changed = false;
+            for (String key : bundledConfig.getKeys(true)) {
+                if (!currentConfig.isSet(key)) {
+                    currentConfig.set(key, bundledConfig.get(key));
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                saveConfig();
+                reloadConfig();
+            }
+        } catch (Exception exception) {
+            getLogger().warning("Failed to merge bundled config defaults: " + exception.getMessage());
+        }
+    }
+
+    public DayCounterService getDayCounterService() {
+        return dayCounterService;
+    }
+
+    public MorningAnnouncementService getMorningAnnouncementService() {
+        return morningAnnouncementService;
+    }
+
+    public SleepOverlayService getSleepOverlayService() {
+        return sleepOverlayService;
+    }
+
+    public TitleSessionCoordinator getTitleSessionCoordinator() {
+        return titleSessionCoordinator;
     }
 
     public boolean isFolia() {

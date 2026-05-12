@@ -67,6 +67,8 @@ final class SleepRuntimeSessions {
         private final Integer previousSleepingPercentage;
         private final long transitionDurationTicks;
         private final long completionDelayTicks;
+        private final long startedDayIndex;
+        private final boolean forced;
         private volatile Set<UUID> recipients;
         private volatile PlatformScheduler.TaskHandle finishTaskHandle = NO_OP_TASK;
         private volatile PlatformScheduler.TaskHandle transitionTaskHandle = NO_OP_TASK;
@@ -81,7 +83,9 @@ final class SleepRuntimeSessions {
                 Collection<UUID> recipients,
                 Integer previousSleepingPercentage,
                 long transitionDurationTicks,
-                long completionDelayTicks
+                long completionDelayTicks,
+                long startedDayIndex,
+                boolean forced
         ) {
             this.worldId = worldId;
             this.sleepTarget = sleepTarget;
@@ -89,6 +93,8 @@ final class SleepRuntimeSessions {
             this.previousSleepingPercentage = previousSleepingPercentage;
             this.transitionDurationTicks = transitionDurationTicks;
             this.completionDelayTicks = completionDelayTicks;
+            this.startedDayIndex = startedDayIndex;
+            this.forced = forced;
         }
 
         UUID worldId() {
@@ -117,6 +123,14 @@ final class SleepRuntimeSessions {
 
         long completionDelayTicks() {
             return completionDelayTicks;
+        }
+
+        long startedDayIndex() {
+            return startedDayIndex;
+        }
+
+        boolean forced() {
+            return forced;
         }
 
         void setFinishTaskHandle(PlatformScheduler.TaskHandle finishTaskHandle) {

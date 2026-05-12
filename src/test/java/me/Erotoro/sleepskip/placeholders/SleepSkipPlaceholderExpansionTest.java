@@ -2,6 +2,7 @@ package me.Erotoro.sleepskip.placeholders;
 
 import me.Erotoro.sleepskip.SleepSkip;
 import me.Erotoro.sleepskip.listeners.SleepListener;
+import me.Erotoro.sleepskip.services.DayCounterService;
 import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -22,6 +23,7 @@ class SleepSkipPlaceholderExpansionTest {
     void globalOfflineModeResolvesGlobalWorldEvenWhenPerWorldEnabled() {
         SleepSkip plugin = mock(SleepSkip.class);
         SleepListener listener = mock(SleepListener.class);
+        DayCounterService dayCounterService = mock(DayCounterService.class);
         Server server = mock(Server.class);
         OfflinePlayer offlinePlayer = mock(OfflinePlayer.class);
 
@@ -41,19 +43,23 @@ class SleepSkipPlaceholderExpansionTest {
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.getServer()).thenReturn(server);
         when(plugin.getSleepListener()).thenReturn(listener);
+        when(plugin.getDayCounterService()).thenReturn(dayCounterService);
         when(server.getWorlds()).thenReturn(List.of(nether, overworld));
         when(listener.getSleepStatus(overworld)).thenReturn(new SleepListener.SleepStatus(4, 2, 2));
+        when(dayCounterService.getDayCount(overworld)).thenReturn(47);
 
         SleepSkipPlaceholderExpansion expansion = new SleepSkipPlaceholderExpansion(plugin);
 
         assertEquals("world", expansion.onRequest(offlinePlayer, "world"));
         assertEquals("2", expansion.onRequest(offlinePlayer, "sleeping"));
+        assertEquals("47", expansion.onRequest(offlinePlayer, "day_count"));
     }
 
     @Test
     void noneOfflineModeReturnsUnavailableForOfflinePlayerWhenPerWorldDisabled() {
         SleepSkip plugin = mock(SleepSkip.class);
         SleepListener listener = mock(SleepListener.class);
+        DayCounterService dayCounterService = mock(DayCounterService.class);
         Server server = mock(Server.class);
         OfflinePlayer offlinePlayer = mock(OfflinePlayer.class);
 
@@ -69,11 +75,13 @@ class SleepSkipPlaceholderExpansionTest {
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.getServer()).thenReturn(server);
         when(plugin.getSleepListener()).thenReturn(listener);
+        when(plugin.getDayCounterService()).thenReturn(dayCounterService);
         when(server.getWorlds()).thenReturn(List.of(overworld));
 
         SleepSkipPlaceholderExpansion expansion = new SleepSkipPlaceholderExpansion(plugin);
 
         assertEquals("N/A", expansion.onRequest(offlinePlayer, "world"));
         assertEquals("N/A", expansion.onRequest(offlinePlayer, "sleeping"));
+        assertEquals("N/A", expansion.onRequest(offlinePlayer, "day_count"));
     }
 }

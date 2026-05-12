@@ -1,137 +1,91 @@
 ![Platform](https://img.shields.io/badge/platform-Paper%20%7C%20Spigot%20%7C%20Folia-green.svg)
 ![Java](https://img.shields.io/badge/java-21%2B-orange.svg)
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.21%2B-red.svg)
+![Tested](https://img.shields.io/badge/Tested-Paper%20%26%20Folia%2026.1.2-blue.svg)
 [![Support me](https://img.shields.io/badge/Support%20me-Ko--fi-ff5f5f?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/erotoro)
 
-# SleepSkip
+# SleepSkipUltra
 
-SleepSkip is a Minecraft plugin for Paper/Spigot/Folia that skips night when enough players are sleeping, supports thunderstorm daytime sleep, and provides a clean overlay/action bar UX.
+SleepSkipUltra is a Minecraft sleep plugin for Paper, Folia, and Spigot servers running 1.21+.
+It replaces rough instant night skips with a cleaner sleep flow: players go to bed, the night accelerates, and the world transitions into morning with overlay feedback, sunrise titles, and day tracking.
+
+If you want a Paper sleep plugin or Folia sleep plugin that feels polished instead of abrupt, this is the goal of the project.
+
+> Plugin folder: `plugins/SleepSkip`
 
 ## Features
 
-- Night skip with `fixed` or `percent` requirement model
+- Smooth sunrise transition instead of a hard instant time jump
 - Unified sleep flow: `IDLE -> ACCELERATING -> FULL_SKIP`
-- Smooth transition to morning
-- Per-world counters
-- AFK-aware counting with Essentials/CMI hooks
-- Thunderstorm-only daytime sleep (`weather-sleep-mode: thunderstorm`)
-- Overlay + ActionBar status/progress UI
+- Configurable night acceleration
+- Overlay and title progress UI
+- Day counter with sunrise title and `%sleepskip_day_count%`
+- AFK-aware sleep counting with Essentials and CMI hooks
+- Thunderstorm daytime sleep support
+- Per-world support
 - PlaceholderAPI integration
 - Locales: `en`, `ru`, `ua`
+- Paper, Folia, and Spigot compatibility
 
 ## Installation
 
 1. Download the latest release from [Releases](https://github.com/Erotoro/SleepSkip/releases)
-2. Put `SleepSkip-1.7.jar` into your server `plugins` folder
+2. Put `SleepSkip-1.8.0.jar` into your server `plugins` folder
 3. Restart the server
 4. Configure `plugins/SleepSkip/config.yml`
 
-## Default config (`config.yml`)
+## Why SleepSkipUltra
 
-```yaml
-settings:
-  language: "en" # en, ru, ua
-  required-type: "percent" # fixed or percent
-  required-value: 60
-
-  ignore-afk: true
-  afk-timeout: 300
-  count-afk-sleepers: true
-  overlay-enabled: true
-
-  actionbar-duration: 5
-  transition-duration-ticks: 60 # 20 ticks = 1 second
-  skip-rain: true
-  weather-sleep-mode: "thunderstorm" # none, thunderstorm
-  per-world: false
-  use-actionbar: true
-
-sleep:
-  start-threshold-percent: 5
-  max-speed-multiplier: 12.0
-  update-interval-ticks: 5
-
-overlay:
-  enabled: true
-  mode: "title"
-  update-interval-ticks: 10
-  fade-in-ticks: 1
-  stay-ticks: 24
-  fade-out-ticks: 1
-  show-status-before-skip: true
-  show-progress-during-transition: true
-
-placeholders:
-  offline-mode: "none" # none, global, fallback-world
-  fallback-world: ""
-```
+- Better sleep UX for SMP servers
+- Smooth night skipping with visible progress
+- Folia-safe support for modern server setups
+- Flexible config, placeholders, and per-world behavior
 
 ## Commands
 
-- `/sleep reload`
-- `/sleep status`
-- `/sleep broadcaststatus`
+| Command | Description |
+|---|---|
+| `/sleep reload` | Reload config and locale files |
+| `/sleep status` | Show current sleep status |
+| `/sleep broadcaststatus` | Broadcast current sleep progress |
+| `/sleep forceskip [world] [--instant]` | Force a smooth or instant skip |
 
 Permission: `sleepskip.admin`
 
-## Extra permissions
+## Permissions
 
-- `sleepskip.bypass` - player is excluded from sleep counters
+- `sleepskip.admin` - access to admin commands
+- `sleepskip.bypass` - exclude a player from sleep counters
 
 ## PlaceholderAPI
 
-- `%sleepskip_sleeping%`
-- `%sleepskip_needed%`
-- `%sleepskip_active_players%`
-- `%sleepskip_world%`
+| Placeholder | Description |
+|---|---|
+| `%sleepskip_sleeping%` | Current sleeping players |
+| `%sleepskip_needed%` | Required players to skip |
+| `%sleepskip_active_players%` | Counted active players |
+| `%sleepskip_world%` | Current world name |
+| `%sleepskip_day_count%` | Current world day count |
 
-## Version 1.7 (current)
+## Compatibility
 
-- Unified night model (`IDLE -> ACCELERATING -> FULL_SKIP`)
-- New public config block `sleep.*`
-- Legacy migration from `settings.night-behavior` and `gradual-acceleration.*`
-- Improved locale fallback handling for corrupted locale files
+| Platform | Support |
+|---|---|
+| Paper 1.21+ | Full, tested on 26.1.2 |
+| Folia 1.21+ | Full, tested on 26.1.2 |
+| Spigot 1.21+ | Full |
 
-## Russian (RU)
+## Notes
 
-SleepSkip — плагин для Minecraft (Paper/Spigot/Folia), который пропускает ночь при достаточном количестве спящих игроков, поддерживает сон днём во время грозы и показывает статус через Overlay/ActionBar.
-
-### Основные возможности
-
-- Пропуск ночи по модели `fixed` или `percent`
-- Единая логика сна: `IDLE -> ACCELERATING -> FULL_SKIP`
-- Плавный переход к утру
-- Поддержка per-world подсчёта
-- Учёт AFK и интеграции Essentials/CMI
-- Сон днём только во время грозы
-- PlaceholderAPI
-- Локали: `en`, `ru`, `ua`
-
-### Установка
-
-1. Скачайте последнюю версию из [Releases](https://github.com/Erotoro/SleepSkip/releases)
-2. Поместите `SleepSkip-1.7.jar` в папку `plugins`
-3. Перезапустите сервер
-4. Настройте `plugins/SleepSkip/config.yml`
-
-### Команды
-
-- `/sleep reload`
-- `/sleep status`
-- `/sleep broadcaststatus`
-
-Права: `sleepskip.admin`, `sleepskip.bypass`
+- Java 21+
+- Main tested targets: Paper 26.1.2 and Folia 26.1.2
+- Plugin data folder: `plugins/SleepSkip`
 
 ## Support
 
-- Discord: [Наш Discord](https://discord.gg/FMhuu3meH2)
+- Discord: [SleepSkipUltra Discord](https://discord.gg/FMhuu3meH2)
 - Issues: [GitHub Issues](https://github.com/Erotoro/SleepSkip/issues)
 
 ## bStats
 
 [![bStats](https://bstats.org/signatures/bukkit/SleepSkip.svg)](https://bstats.org/plugin/bukkit/SleepSkip/29936)
-
-Author: Erotoro  
-Version: 1.7  
-Minecraft: 1.21+  
-Dependencies: none (optional: Essentials, CMI, PlaceholderAPI)

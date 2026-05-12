@@ -5,11 +5,11 @@ api-version: '1.21'
 folia-supported: true
 softdepend: [Essentials, CMI, PlaceholderAPI]
 authors: [Erotoro]
-description: Multilingual night skipping plugin
+description: SleepSkipUltra - smooth night skipping with acceleration, overlay UI, and Paper/Folia 1.21+ support
 commands:
   sleep:
-    description: SleepSkip commands
-    usage: /sleep <reload|status|broadcaststatus>
+    description: SleepSkipUltra commands
+    usage: /sleep <reload|status|broadcaststatus|forceskip>
 permissions:
   sleepskip.admin:
     description: Access to SleepSkip admin commands

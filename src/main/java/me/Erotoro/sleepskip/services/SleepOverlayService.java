@@ -11,8 +11,10 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,11 +44,14 @@ public class SleepOverlayService {
     private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
 
     private final SleepSkip plugin;
+    private final TitleSessionCoordinator titleSessionCoordinator;
     private final ConcurrentHashMap<String, OverlaySession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletionGraceState> completionGraceStates = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<GuardedPostCompletionTask>> postCompletionTasks = new ConcurrentHashMap<>();
 
     public SleepOverlayService(SleepSkip plugin) {
         this.plugin = plugin;
+        this.titleSessionCoordinator = plugin.getTitleSessionCoordinator();
     }
 
     public void showStatus(
@@ -156,6 +161,24 @@ public class SleepOverlayService {
         completeTransition(scope(world).key());
     }
 
+    public void runAfterCompletionGrace(World world, Runnable task) {
+        if (world == null || task == null) {
+            return;
+        }
+
+        String key = scope(world).key();
+        synchronized (this) {
+            CompletionGraceState completionGraceState = completionGraceStates.get(key);
+            if (completionGraceState == null) {
+                long expectedToken = titleSessionCoordinator.currentToken(key);
+                PlatformScheduler.runGlobalDelayed(plugin, () -> runGuardedTask(key, expectedToken, task), 1L);
+                return;
+            }
+            postCompletionTasks.computeIfAbsent(key, ignored -> new ArrayList<>())
+                    .add(new GuardedPostCompletionTask(completionGraceState.token(), task));
+        }
+    }
+
     public void refreshRecipients(World world, Collection<UUID> recipients) {
         if (world == null) {
             return;
@@ -234,13 +257,14 @@ public class SleepOverlayService {
         if (existing != null && existing.descriptor().equals(descriptor)) {
             return;
         }
+        long token = titleSessionCoordinator.claim(descriptor.scope().key());
         if (existing != null) {
-            clearRecipientsNoLongerTargeted(existing.descriptor().recipients(), descriptor.recipients());
+            clearRecipientsNoLongerTargeted(existing.descriptor().recipients(), descriptor.recipients(), descriptor.scope(), token);
             stop(descriptor.scope().key(), false);
         }
 
         int intervalTicks = getUpdateIntervalTicks();
-        OverlaySession session = new OverlaySession(descriptor, null, createTransitionProgressState(descriptor));
+        OverlaySession session = new OverlaySession(descriptor, token, null, createTransitionProgressState(descriptor));
 
         PlatformScheduler.TaskHandle handle = PlatformScheduler.runGlobalAtFixedRate(plugin, () -> {
             OverlaySession current = sessions.get(descriptor.scope().key());
@@ -271,7 +295,7 @@ public class SleepOverlayService {
                                 + ",transitionDurationTicks=" + currentDescriptor.transitionDurationTicks()
                 );
             }
-            sendTitle(currentDescriptor.scope(), frame);
+            sendTitle(currentDescriptor.scope(), session.token(), frame);
         }, 1L, intervalTicks);
 
         session.setHandle(handle);
@@ -298,7 +322,7 @@ public class SleepOverlayService {
             return;
         }
 
-        clearRecipientsNoLongerTargeted(currentDescriptor.recipients(), recipients);
+        clearRecipientsNoLongerTargeted(currentDescriptor.recipients(), recipients, currentDescriptor.scope(), session.token());
         if (recipients.isEmpty()) {
             stop(key, false);
             return;
@@ -328,11 +352,12 @@ public class SleepOverlayService {
 
         OverlayFrame finalFrame = renderFrame(descriptor, 100, getUpdateIntervalTicks(), false);
         // Must bypass dedupe here: final completion frame is semantically required and should always be reasserted.
-        sendTitle(descriptor.scope(), finalFrame);
+        sendTitle(descriptor.scope(), session.token(), finalFrame);
         long completionHoldTicks = resolveCompletionHoldTicks(getUpdateIntervalTicks());
         armCompletionGrace(
                 descriptor.scope().key(),
                 descriptor.scope(),
+                session.token(),
                 finalFrame.recipients(),
                 completionHoldTicks
         );
@@ -370,7 +395,8 @@ public class SleepOverlayService {
 
         if (completionGraceState != null) {
             completionGraceStates.remove(key, completionGraceState);
-            clearRecipients(completionGraceState.recipients());
+            clearRecipients(completionGraceState.scope(), completionGraceState.token(), completionGraceState.recipients());
+            runPostCompletionTasks(key);
             logTransitionLifecycle("force_stop_cleared_completion_grace", completionGraceState.scope(), "");
             return;
         }
@@ -383,7 +409,7 @@ public class SleepOverlayService {
         logTransitionLifecycle("stop_without_session", scopeByKey(key), "");
     }
 
-    private void armCompletionGrace(String key, OverlayScope scope, Set<UUID> recipients, long holdTicks) {
+    private void armCompletionGrace(String key, OverlayScope scope, long token, Set<UUID> recipients, long holdTicks) {
         if (holdTicks <= 0L || recipients == null || recipients.isEmpty()) {
             completionGraceStates.remove(key);
             return;
@@ -391,7 +417,7 @@ public class SleepOverlayService {
 
         long startedAtNanos = System.nanoTime();
         long holdNanos = holdTicks * TICK_NANOS;
-        CompletionGraceState state = new CompletionGraceState(scope, Set.copyOf(recipients), startedAtNanos + holdNanos, startedAtNanos);
+        CompletionGraceState state = new CompletionGraceState(scope, token, Set.copyOf(recipients), startedAtNanos + holdNanos, startedAtNanos);
         completionGraceStates.put(key, state);
 
         PlatformScheduler.runGlobalDelayed(plugin, () -> clearAfterCompletionGrace(key, state.issuedAtNanos()), holdTicks);
@@ -416,11 +442,45 @@ public class SleepOverlayService {
                 state.scope(),
                 "recipients=" + state.recipients().size()
         );
-        clearRecipients(state.recipients());
+        boolean hasQueuedPostTasks = hasQueuedPostCompletionTasks(key);
+        if (shouldClearRecipientsBeforePostCompletionTasks(hasQueuedPostTasks)) {
+            clearRecipients(state.scope(), state.token(), state.recipients());
+        }
+        runPostCompletionTasks(key);
+    }
+
+    private void runPostCompletionTasks(String key) {
+        List<GuardedPostCompletionTask> tasks = postCompletionTasks.remove(key);
+        if (tasks == null || tasks.isEmpty()) {
+            return;
+        }
+
+        for (GuardedPostCompletionTask task : tasks) {
+            PlatformScheduler.runGlobalDelayed(plugin, () -> runGuardedTask(key, task.expectedToken(), task.task()), 1L);
+        }
+    }
+
+    private void runGuardedTask(String scopeKey, long expectedToken, Runnable task) {
+        if (task == null) {
+            return;
+        }
+        if (expectedToken > 0L && !titleSessionCoordinator.isCurrent(scopeKey, expectedToken)) {
+            return;
+        }
+        task.run();
+    }
+
+    private boolean hasQueuedPostCompletionTasks(String key) {
+        List<GuardedPostCompletionTask> tasks = postCompletionTasks.get(key);
+        return tasks != null && !tasks.isEmpty();
+    }
+
+    static boolean shouldClearRecipientsBeforePostCompletionTasks(boolean hasQueuedPostTasks) {
+        return !hasQueuedPostTasks;
     }
 
     private void clearTitles(OverlaySession session) {
-        clearRecipients(session.descriptor().recipients());
+        clearRecipients(session.descriptor().scope(), session.token(), session.descriptor().recipients());
     }
 
     private OverlayFrame renderFrame(OverlayDescriptor descriptor, int progress, int intervalTicks, boolean activelyMaintained) {
@@ -471,10 +531,10 @@ public class SleepOverlayService {
         if (!session.shouldSend(frame)) {
             return;
         }
-        sendTitle(descriptor.scope(), frame);
+        sendTitle(descriptor.scope(), session.token(), frame);
     }
 
-    private void sendTitle(OverlayScope scope, OverlayFrame frame) {
+    private void sendTitle(OverlayScope scope, long token, OverlayFrame frame) {
         Component title = MINI_MESSAGE.deserialize(frame.title());
         Component subtitle = MINI_MESSAGE.deserialize(frame.subtitle());
         Title renderedTitle = Title.title(title, subtitle, Title.Times.times(
@@ -489,7 +549,7 @@ public class SleepOverlayService {
                 continue;
             }
             PlatformScheduler.runForPlayer(plugin, player, () -> {
-                if (isValidRecipient(player, scope)) {
+                if (titleSessionCoordinator.isCurrent(scope.key(), token) && isValidRecipient(player, scope)) {
                     player.showTitle(renderedTitle);
                 }
             });
@@ -500,23 +560,27 @@ public class SleepOverlayService {
         return player.isOnline() && (!scope.perWorld() || player.getWorld().getUID().equals(scope.worldId()));
     }
 
-    private void clearRecipientsNoLongerTargeted(Set<UUID> previousRecipients, Set<UUID> nextRecipients) {
+    private void clearRecipientsNoLongerTargeted(Set<UUID> previousRecipients, Set<UUID> nextRecipients, OverlayScope scope, long token) {
         if (previousRecipients.isEmpty()) {
             return;
         }
 
         Set<UUID> staleRecipients = new HashSet<>(previousRecipients);
         staleRecipients.removeAll(nextRecipients);
-        clearRecipients(staleRecipients);
+        clearRecipients(scope, token, staleRecipients);
     }
 
-    private void clearRecipients(Collection<UUID> recipients) {
+    private void clearRecipients(OverlayScope scope, long token, Collection<UUID> recipients) {
         for (UUID recipient : recipients) {
             Player player = Bukkit.getPlayer(recipient);
             if (player == null || !player.isOnline()) {
                 continue;
             }
-            PlatformScheduler.runForPlayer(plugin, player, player::clearTitle);
+            PlatformScheduler.runForPlayer(plugin, player, () -> {
+                if (titleSessionCoordinator.isCurrent(scope.key(), token) && isValidRecipient(player, scope)) {
+                    player.clearTitle();
+                }
+            });
         }
     }
 
@@ -779,7 +843,10 @@ public class SleepOverlayService {
     private record TransitionProgressState(long startedAtNanos, long transitionDurationTicks) {
     }
 
-    private record CompletionGraceState(OverlayScope scope, Set<UUID> recipients, long expiresAtNanos, long issuedAtNanos) {
+    private record CompletionGraceState(OverlayScope scope, long token, Set<UUID> recipients, long expiresAtNanos, long issuedAtNanos) {
+    }
+
+    private record GuardedPostCompletionTask(long expectedToken, Runnable task) {
     }
 
     private enum OverlayPhase {
@@ -790,16 +857,19 @@ public class SleepOverlayService {
 
     private static final class OverlaySession {
         private volatile OverlayDescriptor descriptor;
+        private final long token;
         private final TransitionProgressState transitionProgressState;
         private PlatformScheduler.TaskHandle handle;
         private OverlayFrame lastFrame;
 
         private OverlaySession(
                 OverlayDescriptor descriptor,
+                long token,
                 PlatformScheduler.TaskHandle handle,
                 TransitionProgressState transitionProgressState
         ) {
             this.descriptor = descriptor;
+            this.token = token;
             this.handle = handle;
             this.transitionProgressState = transitionProgressState;
         }
@@ -815,6 +885,10 @@ public class SleepOverlayService {
 
         private TransitionProgressState transitionProgressState() {
             return transitionProgressState;
+        }
+
+        private long token() {
+            return token;
         }
 
         private void setHandle(PlatformScheduler.TaskHandle handle) {

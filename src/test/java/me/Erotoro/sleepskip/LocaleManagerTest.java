@@ -41,9 +41,9 @@ class LocaleManagerTest {
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.getDataFolder()).thenReturn(dataFolderPath.toFile());
         when(plugin.getLogger()).thenReturn(Logger.getLogger("LocaleManagerTest"));
-        when(plugin.getResource("lang/ru.yml")).thenReturn(new ByteArrayInputStream(bundledBytes));
-        when(plugin.getResource("lang/en.yml")).thenReturn(new ByteArrayInputStream(bundledBytes));
-        when(plugin.getResource("lang/ua.yml")).thenReturn(new ByteArrayInputStream(bundledBytes));
+        when(plugin.getResource("lang/ru.yml")).thenAnswer(invocation -> new ByteArrayInputStream(bundledBytes));
+        when(plugin.getResource("lang/en.yml")).thenAnswer(invocation -> new ByteArrayInputStream(bundledBytes));
+        when(plugin.getResource("lang/ua.yml")).thenAnswer(invocation -> new ByteArrayInputStream(bundledBytes));
 
         LocaleManager localeManager = new LocaleManager(plugin);
         localeManager.reload();
@@ -51,5 +51,44 @@ class LocaleManagerTest {
         assertEquals("Доброе утро!", localeManager.tr("messages.nightSkipped"));
         verify(plugin).saveResource("lang/ru.yml", true);
     }
-}
 
+    @Test
+    void reloadMergesMissingLocaleKeysWithoutOverwritingExistingValues() throws Exception {
+        Path dataFolderPath = tempDir.resolve("plugin-data");
+        Path langDir = dataFolderPath.resolve("lang");
+        Files.createDirectories(langDir);
+
+        Path ruPath = langDir.resolve("ru.yml");
+        Path enPath = langDir.resolve("en.yml");
+        Path uaPath = langDir.resolve("ua.yml");
+
+        Files.writeString(ruPath, "messages:\n  nightSkipped: \"Моё утро!\"\n");
+        Files.writeString(enPath, "messages:\n  nightSkipped: \"stub\"\n");
+        Files.writeString(uaPath, "messages:\n  nightSkipped: \"stub\"\n");
+
+        SleepSkip plugin = mock(SleepSkip.class);
+        FileConfiguration config = new YamlConfiguration();
+        config.set("settings.language", "ru");
+
+        String bundledRu = """
+                messages:
+                  nightSkipped: "Доброе утро!"
+                  day-counter-title: "<gold><bold>День {day}</bold></gold>"
+                """;
+        String bundledStub = "messages:\n  nightSkipped: \"stub\"\n";
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getDataFolder()).thenReturn(dataFolderPath.toFile());
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("LocaleManagerTest"));
+        when(plugin.getResource("lang/ru.yml")).thenAnswer(invocation -> new ByteArrayInputStream(bundledRu.getBytes(StandardCharsets.UTF_8)));
+        when(plugin.getResource("lang/en.yml")).thenAnswer(invocation -> new ByteArrayInputStream(bundledStub.getBytes(StandardCharsets.UTF_8)));
+        when(plugin.getResource("lang/ua.yml")).thenAnswer(invocation -> new ByteArrayInputStream(bundledStub.getBytes(StandardCharsets.UTF_8)));
+
+        LocaleManager localeManager = new LocaleManager(plugin);
+        localeManager.reload();
+
+        YamlConfiguration mergedLocale = YamlConfiguration.loadConfiguration(ruPath.toFile());
+        assertEquals("Моё утро!", mergedLocale.getString("messages.nightSkipped"));
+        assertEquals("<gold><bold>День {day}</bold></gold>", mergedLocale.getString("messages.day-counter-title"));
+    }
+}

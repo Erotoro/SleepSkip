@@ -12,6 +12,7 @@ public final class ConfigValidator {
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("ru", "en", "ua");
     private static final Set<String> SUPPORTED_REQUIRED_TYPES = Set.of("fixed", "percent");
     private static final Set<String> SUPPORTED_WEATHER_SLEEP_MODES = Set.of("none", "thunderstorm");
+    private static final Set<String> SUPPORTED_DAY_COUNTER_ANIMATION_MODES = Set.of("static", "typewriter");
     private static final String LEGACY_THRESHOLD_SKIP_MODE = "threshold_skip";
     private static final String UNIFIED_START_THRESHOLD_PERCENT_PATH = "sleep.start-threshold-percent";
     private static final String UNIFIED_MAX_SPEED_MULTIPLIER_PATH = "sleep.max-speed-multiplier";
@@ -28,13 +29,13 @@ public final class ConfigValidator {
         FileConfiguration config = plugin.getConfig();
         boolean changed = false;
 
-        String language = normalizedString(config, "settings.language", "ru");
+        String language = normalizedString(config, "settings.language", "en");
         if (!SUPPORTED_LANGUAGES.contains(language)) {
             plugin.getLogger().warning(plugin.tr(
                     "logs.invalid-language",
-                    "Unsupported language in config. Falling back to ru."
+                    "Unsupported language in config. Falling back to en."
             ));
-            config.set("settings.language", "ru");
+            config.set("settings.language", "en");
             changed = true;
         }
 
@@ -146,6 +147,42 @@ public final class ConfigValidator {
                     "afk-timeout must not be negative. Falling back to 300."
             ));
             config.set("settings.afk-timeout", 300L);
+            changed = true;
+        }
+
+        int daytimeTicks = config.getInt("settings.daytime-ticks", 0);
+        int normalizedDaytimeTicks = Math.max(0, Math.min(23999, daytimeTicks));
+        if (daytimeTicks != normalizedDaytimeTicks) {
+            plugin.getLogger().warning("settings.daytime-ticks must be between 0 and 23999.");
+            config.set("settings.daytime-ticks", normalizedDaytimeTicks);
+            changed = true;
+        }
+
+        long dayCounterStayTicks = config.getLong("day-counter.stay-ticks", 50L);
+        if (dayCounterStayTicks < 1L) {
+            plugin.getLogger().warning("day-counter.stay-ticks must be at least 1.");
+            config.set("day-counter.stay-ticks", 50L);
+            changed = true;
+        }
+
+        String animationMode = normalizedString(config, "day-counter.animation.mode", "typewriter");
+        if (!SUPPORTED_DAY_COUNTER_ANIMATION_MODES.contains(animationMode)) {
+            plugin.getLogger().warning("day-counter.animation.mode must be one of: static, typewriter.");
+            config.set("day-counter.animation.mode", "typewriter");
+            changed = true;
+        }
+
+        long stepIntervalTicks = config.getLong("day-counter.animation.step-interval-ticks", 2L);
+        if (stepIntervalTicks < 1L) {
+            plugin.getLogger().warning("day-counter.animation.step-interval-ticks must be at least 1.");
+            config.set("day-counter.animation.step-interval-ticks", 2L);
+            changed = true;
+        }
+
+        long finalHoldTicks = config.getLong("day-counter.animation.final-hold-ticks", 30L);
+        if (finalHoldTicks < 1L) {
+            plugin.getLogger().warning("day-counter.animation.final-hold-ticks must be at least 1.");
+            config.set("day-counter.animation.final-hold-ticks", 30L);
             changed = true;
         }
 

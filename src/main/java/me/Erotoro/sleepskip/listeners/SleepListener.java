@@ -1,6 +1,7 @@
 package me.Erotoro.sleepskip.listeners;
 
 import me.Erotoro.sleepskip.SleepSkip;
+import me.Erotoro.sleepskip.services.DayCounterService;
 import me.Erotoro.sleepskip.services.PlayerEligibilityService;
 import me.Erotoro.sleepskip.services.PlayerStateService;
 import me.Erotoro.sleepskip.services.SleepOverlayService;
@@ -18,6 +19,7 @@ import org.bukkit.GameRule;
 import org.bukkit.Statistic;
 import org.bukkit.Tag;
 import org.bukkit.World;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -30,7 +32,9 @@ import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -48,16 +52,19 @@ public class SleepListener implements Listener {
     private final SleepSkip plugin;
     private final PlayerStateService playerStateService;
     private final SleepOverlayService sleepOverlayService;
+    private final DayCounterService dayCounterService;
     private final SleepRuleConfig ruleConfig;
     private final SleepStatusTracker statusTracker;
     private final ConcurrentHashMap<UUID, ActiveSkipSession> activeSkipSessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, ActiveNightAccelerationSession> activeNightAccelerationSessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, NightBehaviorState> nightBehaviorStates = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Integer> suppressedVanillaSleepPercentages = new ConcurrentHashMap<>();
 
     public SleepListener(SleepSkip plugin, PlayerStateService playerStateService, SleepOverlayService sleepOverlayService) {
         this.plugin = plugin;
         this.playerStateService = playerStateService;
         this.sleepOverlayService = sleepOverlayService;
+        this.dayCounterService = plugin.getDayCounterService();
         this.ruleConfig = new SleepRuleConfig(plugin);
         this.statusTracker = new SleepStatusTracker(plugin, playerStateService, new PlayerEligibilityService());
     }
@@ -84,6 +91,7 @@ public class SleepListener implements Listener {
             return;
         }
 
+        ensureVanillaSleepSkipSuppressed(world);
         scheduleSleepStateUpdate(world);
     }
 
@@ -187,6 +195,7 @@ public class SleepListener implements Listener {
         }
 
         if (currentSleepTarget == SleepTimingRules.SleepTarget.NONE) {
+            releaseVanillaSleepSkipSuppression(world);
             transitionNightBehaviorState(world, NightBehaviorState.IDLE);
             sleepOverlayService.stop(world);
             return;
@@ -194,12 +203,14 @@ public class SleepListener implements Listener {
 
         SleepState state = getSleepState(world);
         if (currentSleepTarget == SleepTimingRules.SleepTarget.WEATHER) {
+            releaseVanillaSleepSkipSuppression(world);
             transitionNightBehaviorState(world, NightBehaviorState.IDLE);
             handleWeatherSleepState(world, state);
             return;
         }
 
         if (currentSleepTarget != SleepTimingRules.SleepTarget.NIGHT) {
+            releaseVanillaSleepSkipSuppression(world);
             transitionNightBehaviorState(world, NightBehaviorState.IDLE);
             sleepOverlayService.stop(world);
             return;
@@ -241,6 +252,7 @@ public class SleepListener implements Listener {
         }
 
         if (state.sleepingPlayers() <= 0) {
+            releaseVanillaSleepSkipSuppression(world);
             sleepOverlayService.stop(world);
             return;
         }
@@ -287,22 +299,61 @@ public class SleepListener implements Listener {
             SleepState state,
             SleepTimingRules.SleepTarget currentSleepTarget
     ) {
-        if (session.sleepTarget() == SleepTimingRules.SleepTarget.WEATHER) {
-            if (state.sleepingPlayers() < state.requiredPlayers()) {
+        return isSkipSessionStillValid(
+                session.sleepTarget(),
+                session.isCommitted(),
+                ruleConfig.isOverworld(world),
+                state.sleepingPlayers(),
+                state.requiredPlayers(),
+                currentSleepTarget
+        );
+    }
+
+    private static boolean isSkipSessionStillValid(
+            SleepTimingRules.SleepTarget sessionSleepTarget,
+            boolean committed,
+            boolean overworld,
+            int sleepingPlayers,
+            int requiredPlayers,
+            SleepTimingRules.SleepTarget currentSleepTarget
+    ) {
+        if (sessionSleepTarget == SleepTimingRules.SleepTarget.WEATHER) {
+            if (currentSleepTarget != SleepTimingRules.SleepTarget.WEATHER) {
                 return false;
             }
-            return currentSleepTarget == SleepTimingRules.SleepTarget.WEATHER;
+            if (committed) {
+                return true;
+            }
+            return sleepingPlayers >= requiredPlayers;
         }
 
-        if (!ruleConfig.isOverworld(world)) {
+        if (!overworld) {
             return false;
         }
 
-        if (session.isCommitted()) {
+        if (committed) {
             return true;
         }
 
-        return state.sleepingPlayers() >= state.requiredPlayers();
+        return sleepingPlayers >= requiredPlayers;
+    }
+
+    public static boolean isSkipSessionStillValidForTests(
+            SleepTimingRules.SleepTarget sessionSleepTarget,
+            boolean committed,
+            boolean overworld,
+            int sleepingPlayers,
+            int requiredPlayers,
+            SleepTimingRules.SleepTarget currentSleepTarget
+    ) {
+        return isSkipSessionStillValid(
+                sessionSleepTarget,
+                committed,
+                overworld,
+                sleepingPlayers,
+                requiredPlayers,
+                currentSleepTarget
+        );
     }
 
     public SleepStatus getSleepStatus(World world) {
@@ -324,6 +375,17 @@ public class SleepListener implements Listener {
     }
 
     private void startSkip(World world, SleepState state, SleepTimingRules.SleepTarget sleepTarget) {
+        startSkip(world, sleepTarget, state.recipients(), state.sleepingPlayers(), state.requiredPlayers(), false);
+    }
+
+    private void startSkip(
+            World world,
+            SleepTimingRules.SleepTarget sleepTarget,
+            Collection<UUID> recipients,
+            int sleepingPlayers,
+            int requiredPlayers,
+            boolean forced
+    ) {
         UUID worldId = world.getUID();
         if (sleepTarget == SleepTimingRules.SleepTarget.NIGHT) {
             transitionNightBehaviorState(world, NightBehaviorState.FULL_SKIP);
@@ -331,50 +393,54 @@ public class SleepListener implements Listener {
         long transitionDurationTicks = resolveTransitionDurationTicks(sleepTarget);
         long completionDelayTicks = SleepTimingRules.getCompletionDelayTicks(sleepTarget, transitionDurationTicks);
         Integer previousSleepingPercentage = SleepTimingRules.shouldAdvanceToNextMorning(sleepTarget)
-                ? disableVanillaSleepSkip(world)
+                ? takeOrDisableVanillaSleepSkip(world)
                 : null;
 
         ActiveSkipSession session = new ActiveSkipSession(
                 worldId,
                 sleepTarget,
-                state.recipients(),
+                Set.copyOf(recipients),
                 previousSleepingPercentage,
                 transitionDurationTicks,
-                completionDelayTicks
+                completionDelayTicks,
+                currentDayIndex(world),
+                forced
         );
         ActiveSkipSession existing = activeSkipSessions.putIfAbsent(worldId, session);
         if (existing != null) {
             restoreVanillaSleepSkip(world, previousSleepingPercentage);
             return;
         }
+        if (forced) {
+            session.markCommitted();
+        }
         logOverlayLifecycle(
                 world,
                 "skip_start",
                 "target=" + sleepTarget
-                        + ",sleeping=" + state.sleepingPlayers()
-                        + ",needed=" + state.requiredPlayers()
+                        + ",sleeping=" + sleepingPlayers
+                        + ",needed=" + requiredPlayers
                         + ",transitionTicks=" + transitionDurationTicks
                         + ",completionDelayTicks=" + completionDelayTicks
-                        + ",recipients=" + state.recipients().size()
+                        + ",recipients=" + recipients.size()
         );
 
         String startMessage = sleepTarget == SleepTimingRules.SleepTarget.NIGHT
                 ? plugin.tr("messages.nightSkipping", "<green>Skipping the night...")
                 : plugin.tr("messages.weatherSkipping", "<green>Sleeping through the thunderstorm...");
-        sendConfiguredMessage(world, state.recipients(), startMessage);
+        sendConfiguredMessage(world, recipients, startMessage);
         sleepOverlayService.startTransition(
                 world,
                 sleepTarget,
-                state.recipients(),
-                state.sleepingPlayers(),
-                state.requiredPlayers(),
+                Set.copyOf(recipients),
+                sleepingPlayers,
+                requiredPlayers,
                 transitionDurationTicks
         );
         runSkip(world, session);
     }
 
     private void runSkip(World world, ActiveSkipSession session) {
-        resetRestStatistic(world);
         session.setValidationTaskHandle(startActiveSkipValidationTask(world.getUID(), session));
 
         if (SleepTimingRules.shouldAdvanceToNextMorning(session.sleepTarget())) {
@@ -547,13 +613,8 @@ public class SleepListener implements Listener {
         sendConfiguredMessage(world, state.recipients(), message);
     }
 
-    private void resetRestStatistic(World world) {
-        for (UUID playerId : statusTracker.sleepingPlayersSnapshot()) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player == null || !player.isOnline()) {
-                continue;
-            }
-
+    private void resetPhantomTimerForWorld(World world) {
+        for (Player player : world.getPlayers()) {
             PlatformScheduler.runForPlayer(plugin, player, () -> {
                 if (player.isOnline() && player.getWorld().equals(world)) {
                     player.setStatistic(Statistic.TIME_SINCE_REST, 0);
@@ -583,11 +644,19 @@ public class SleepListener implements Listener {
             session.cancelTasks();
 
             if (session.sleepTarget() == SleepTimingRules.SleepTarget.NIGHT) {
+                if (!hasDayAdvancedSinceSkipStarted(session.startedDayIndex(), currentDayIndex(world))) {
+                    applyConfiguredMorningTime(world);
+                }
+                resetPhantomTimerForWorld(world);
                 SleepSkip.incrementNightsSkipped();
             }
 
             // Signal transition completion before wake/cleanup side-effects can trigger overlay recipient shrink.
             sleepOverlayService.completeTransition(world);
+
+            if (session.sleepTarget() == SleepTimingRules.SleepTarget.NIGHT && dayCounterService.isEnabled()) {
+                dayCounterService.scheduleSleepSkipMorningAnnouncement(world, state.overlayRecipients());
+            }
 
             clearWeatherIfNeeded(world, session.sleepTarget());
             wakeSleepingPlayers(world);
@@ -649,22 +718,26 @@ public class SleepListener implements Listener {
             long startTime = world.getTime();
             long startFullTime = world.getFullTime();
             long transitionTicks = Math.max(1L, session.transitionDurationTicks());
-            if (startTime < 1000L) {
+            long targetFullTime = resolveSmoothSkipTargetFullTime(startFullTime, startTime);
+            if (targetFullTime <= startFullTime) {
                 if (!session.markCommitted()) {
                     delegatingHandle.setDelegate(SleepRuntimeSessions.NO_OP_TASK);
                     return;
                 }
-                world.setFullTime(startFullTime + (24000L - startTime));
+                world.setFullTime(startFullTime);
                 delegatingHandle.setDelegate(SleepRuntimeSessions.NO_OP_TASK);
                 return;
             }
-
-            long targetFullTime = startFullTime + (24000L - startTime);
             final long[] tick = {0L};
             final PlatformScheduler.TaskHandle[] handleRef = new PlatformScheduler.TaskHandle[1];
             handleRef[0] = PlatformScheduler.runGlobalAtFixedRate(plugin, () -> {
                 ActiveSkipSession current = activeSkipSessions.get(world.getUID());
                 if (current != session || session.isCancelled() || session.isCompleted()) {
+                    handleRef[0].cancel();
+                    return;
+                }
+
+                if (hasDayAdvancedSinceSkipStarted(session.startedDayIndex(), currentDayIndex(world))) {
                     handleRef[0].cancel();
                     return;
                 }
@@ -685,6 +758,64 @@ public class SleepListener implements Listener {
         });
 
         return delegatingHandle;
+    }
+
+    public static long resolveNextMorningFullTime(long startFullTime, long currentTimeOfDay, long daytimeTicks) {
+        long normalizedTimeOfDay = Math.floorMod(currentTimeOfDay, 24000L);
+        long normalizedDaytimeTicks = Math.max(0L, Math.min(23999L, daytimeTicks));
+        long currentDayBaseFullTime = startFullTime - normalizedTimeOfDay;
+        return currentDayBaseFullTime + 24000L + normalizedDaytimeTicks;
+    }
+
+    public static long resolveSmoothSkipTargetFullTime(long startFullTime, long currentTimeOfDay) {
+        if (!SleepTimingRules.isNight(currentTimeOfDay)) {
+            return startFullTime;
+        }
+        return resolveNextDawnFullTime(startFullTime, currentTimeOfDay);
+    }
+
+    private static long resolveNextDawnFullTime(long startFullTime, long currentTimeOfDay) {
+        long normalizedTimeOfDay = Math.floorMod(currentTimeOfDay, 24000L);
+        long currentDayBaseFullTime = startFullTime - normalizedTimeOfDay;
+        return currentDayBaseFullTime + 24000L;
+    }
+
+    private long currentDayIndex(World world) {
+        if (world == null) {
+            return 0L;
+        }
+        return Math.max(0L, world.getFullTime() / 24000L);
+    }
+
+    private static boolean hasDayAdvancedSinceSkipStarted(long startedDayIndex, long currentDayIndex) {
+        return currentDayIndex > startedDayIndex;
+    }
+
+    public static boolean hasDayAdvancedSinceSkipStartedForTests(long startedDayIndex, long currentDayIndex) {
+        return hasDayAdvancedSinceSkipStarted(startedDayIndex, currentDayIndex);
+    }
+
+    private void applyConfiguredMorningTime(World world) {
+        if (world == null) {
+            return;
+        }
+
+        long configuredDaytimeTicks = Math.max(0L, Math.min(23999L, plugin.getConfig().getLong("settings.daytime-ticks", 0L)));
+        if (configuredDaytimeTicks == world.getTime()) {
+            return;
+        }
+
+        world.setFullTime(resolveConfiguredMorningFullTimeAfterSkip(world.getFullTime(), world.getTime(), configuredDaytimeTicks));
+    }
+
+    public static long resolveConfiguredMorningFullTimeAfterSkip(long currentFullTime, long currentTimeOfDay, long daytimeTicks) {
+        long normalizedTimeOfDay = Math.floorMod(currentTimeOfDay, 24000L);
+        long normalizedDaytimeTicks = Math.max(0L, Math.min(23999L, daytimeTicks));
+        long currentDayBaseFullTime = currentFullTime - normalizedTimeOfDay;
+        if (normalizedTimeOfDay <= normalizedDaytimeTicks) {
+            return currentDayBaseFullTime + normalizedDaytimeTicks;
+        }
+        return currentDayBaseFullTime + 24000L + normalizedDaytimeTicks;
     }
 
     private long resolveTransitionDurationTicks(SleepTimingRules.SleepTarget sleepTarget) {
@@ -726,6 +857,47 @@ public class SleepListener implements Listener {
 
         runWorldState(world, () -> world.setGameRule(GameRule.PLAYERS_SLEEPING_PERCENTAGE, DISABLED_SLEEP_PERCENTAGE));
         return currentPercentage;
+    }
+
+    private Integer takeOrDisableVanillaSleepSkip(World world) {
+        Integer existing = suppressedVanillaSleepPercentages.remove(world.getUID());
+        if (existing != null) {
+            return existing;
+        }
+        return disableVanillaSleepSkip(world);
+    }
+
+    private void ensureVanillaSleepSkipSuppressed(World world) {
+        if (world == null) {
+            return;
+        }
+        suppressedVanillaSleepPercentages.computeIfAbsent(world.getUID(), ignored -> disableVanillaSleepSkip(world));
+    }
+
+    private void releaseVanillaSleepSkipSuppression(World world) {
+        if (world == null) {
+            return;
+        }
+        Integer previousPercentage = suppressedVanillaSleepPercentages.remove(world.getUID());
+        if (previousPercentage != null) {
+            restoreVanillaSleepSkip(world, previousPercentage);
+        }
+    }
+
+    private static boolean shouldKeepVanillaSleepSkipSuppressed(
+            SleepTimingRules.SleepTarget sleepTarget,
+            boolean hasActiveSkip,
+            int sleepingPlayers
+    ) {
+        return hasActiveSkip || (sleepTarget == SleepTimingRules.SleepTarget.NIGHT && sleepingPlayers > 0);
+    }
+
+    public static boolean shouldKeepVanillaSleepSkipSuppressedForTests(
+            SleepTimingRules.SleepTarget sleepTarget,
+            boolean hasActiveSkip,
+            int sleepingPlayers
+    ) {
+        return shouldKeepVanillaSleepSkipSuppressed(sleepTarget, hasActiveSkip, sleepingPlayers);
     }
 
     private void restoreVanillaSleepSkip(World world, Integer previousPercentage) {
@@ -811,6 +983,7 @@ public class SleepListener implements Listener {
             cancelAndRemoveSession(entry.getKey(), entry.getValue(), true);
         }
         stopAllNightAccelerationSessions(true);
+        restoreAllVanillaSleepSkipSuppressions();
         nightBehaviorStates.clear();
     }
 
@@ -823,6 +996,7 @@ public class SleepListener implements Listener {
         sleepOverlayService.stopAll();
         statusTracker.resetSleepingPlayersFromSnapshots();
         statusTracker.invalidateAll();
+        restoreAllVanillaSleepSkipSuppressions();
         nightBehaviorStates.clear();
     }
 
@@ -888,6 +1062,16 @@ public class SleepListener implements Listener {
         if (stopOverlay && world != null) {
             sleepOverlayService.stop(world);
         }
+    }
+
+    private void restoreAllVanillaSleepSkipSuppressions() {
+        for (var entry : List.copyOf(suppressedVanillaSleepPercentages.entrySet())) {
+            World world = Bukkit.getWorld(entry.getKey());
+            if (world != null) {
+                restoreVanillaSleepSkip(world, entry.getValue());
+            }
+        }
+        suppressedVanillaSleepPercentages.clear();
     }
 
     private void clearNightBehaviorState(UUID worldId) {
@@ -965,10 +1149,91 @@ public class SleepListener implements Listener {
         logger.info("[SleepListener] event=" + event + " worldId=" + worldId + " world=" + worldName + suffix);
     }
 
+    public ForceSkipResult requestForceSkip(CommandSender sender, World world, boolean instant) {
+        if (world == null || !ruleConfig.isOverworld(world)) {
+            return ForceSkipResult.UNAVAILABLE;
+        }
+
+        SleepTimingRules.SleepTarget sleepTarget = getSleepTarget(world);
+        if (sleepTarget == SleepTimingRules.SleepTarget.NONE) {
+            return ForceSkipResult.UNAVAILABLE;
+        }
+
+        if (activeSkipSessions.containsKey(world.getUID())) {
+            return ForceSkipResult.ALREADY_RUNNING;
+        }
+
+        statusTracker.cleanupSleepingPlayers();
+        statusTracker.invalidate(world);
+
+        if (instant) {
+            runWorldState(world, () -> executeInstantSkip(world, sleepTarget));
+            logForceSkip(sender, world, true);
+            return ForceSkipResult.STARTED_INSTANT;
+        }
+
+        SleepState state = getSleepState(world);
+        startSkip(
+                world,
+                sleepTarget,
+                collectWorldRecipients(world),
+                state.sleepingPlayers(),
+                Math.max(1, state.requiredPlayers()),
+                true
+        );
+        logForceSkip(sender, world, false);
+        return ForceSkipResult.STARTED_SMOOTH;
+    }
+
+    private void executeInstantSkip(World world, SleepTimingRules.SleepTarget sleepTarget) {
+        SleepState state = getSleepState(world);
+        if (sleepTarget == SleepTimingRules.SleepTarget.NIGHT) {
+            long targetTime = Math.max(0L, Math.min(23999L, plugin.getConfig().getLong("settings.daytime-ticks", 0L)));
+            world.setFullTime(resolveNextMorningFullTime(world.getFullTime(), world.getTime(), targetTime));
+            resetPhantomTimerForWorld(world);
+            SleepSkip.incrementNightsSkipped();
+            if (dayCounterService.isEnabled()) {
+                dayCounterService.scheduleSleepSkipMorningAnnouncement(world, state.overlayRecipients());
+            }
+        }
+
+        clearWeatherIfNeeded(world, sleepTarget);
+        wakeSleepingPlayers(world);
+        removeSleepingPlayersForWorld(world);
+        statusTracker.invalidate(world);
+        sleepOverlayService.stop(world);
+    }
+
+    private Set<UUID> collectWorldRecipients(World world) {
+        Set<UUID> recipients = new LinkedHashSet<>();
+        for (Player player : world.getPlayers()) {
+            recipients.add(player.getUniqueId());
+        }
+        return recipients;
+    }
+
+    private void logForceSkip(CommandSender sender, World world, boolean instant) {
+        String initiator = sender == null ? "UNKNOWN" : sender.getName();
+        plugin.getLogger().info("[SleepSkipUltra] Force skip triggered by "
+                + initiator
+                + " in world '"
+                + world.getName()
+                + "' ("
+                + (instant ? "instant" : "smooth")
+                + ")");
+    }
+
     public record SleepStatus(int activePlayers, int sleepingPlayers, int requiredPlayers) {
     }
 
     private record NightBehaviorPlan(NightBehaviorState behaviorState, NightAccelerationProfile accelerationProfile) {
+    }
+
+    public enum ForceSkipResult {
+        STARTED_SMOOTH,
+        STARTED_INSTANT,
+        ALREADY_RUNNING,
+        UNAVAILABLE
     }
 }
 

@@ -3,6 +3,8 @@ package me.Erotoro.sleepskip.services;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SleepOverlayServiceProgressTest {
 
@@ -42,5 +44,15 @@ class SleepOverlayServiceProgressTest {
     @Test
     void visibleTransitionProgressCanReachHundredBeforeCompletionSignal() {
         assertEquals(100, SleepOverlayService.calculateVisibleTransitionProgressPercent(60L, 60L));
+    }
+
+    @Test
+    void completionGraceKeepsCurrentTitleWhenMorningAnnouncementIsQueued() {
+        assertFalse(SleepOverlayService.shouldClearRecipientsBeforePostCompletionTasks(true));
+    }
+
+    @Test
+    void completionGraceClearsRecipientsWhenNoMorningAnnouncementIsQueued() {
+        assertTrue(SleepOverlayService.shouldClearRecipientsBeforePostCompletionTasks(false));
     }
 }
