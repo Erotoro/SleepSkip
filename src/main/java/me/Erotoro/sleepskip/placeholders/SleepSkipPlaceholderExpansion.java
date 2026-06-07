@@ -2,6 +2,7 @@ package me.Erotoro.sleepskip.placeholders;
 
 import me.Erotoro.sleepskip.SleepSkip;
 import me.Erotoro.sleepskip.listeners.SleepListener;
+import me.Erotoro.sleepskip.util.SleepTimingRules;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
@@ -57,10 +58,28 @@ public class SleepSkipPlaceholderExpansion extends PlaceholderExpansion {
             case "sleeping" -> Integer.toString(status.sleepingPlayers());
             case "needed" -> Integer.toString(status.requiredPlayers());
             case "active_players" -> Integer.toString(status.activePlayers());
+            case "remaining" -> Integer.toString(Math.max(0, status.requiredPlayers() - status.sleepingPlayers()));
+            case "percent" -> Integer.toString(computeProgressPercent(status));
+            case "state" -> listener.getBehaviorStateName(world);
+            case "speed" -> formatSpeed(listener.getCurrentSpeedMultiplier(world));
+            case "is_night" -> Boolean.toString(SleepTimingRules.isNight(world.getTime()));
             case "day_count" -> Integer.toString(plugin.getDayCounterService().getDayCount(world));
             case "world" -> world.getName();
             default -> null;
         };
+    }
+
+    private int computeProgressPercent(SleepListener.SleepStatus status) {
+        if (status.requiredPlayers() <= 0) {
+            return 0;
+        }
+        int percent = (int) Math.round(status.sleepingPlayers() * 100.0D / status.requiredPlayers());
+        return Math.max(0, Math.min(100, percent));
+    }
+
+    private String formatSpeed(double speedMultiplier) {
+        double normalized = Math.max(1.0D, speedMultiplier);
+        return String.format(java.util.Locale.ROOT, "%.1f", normalized);
     }
 
     private World resolveWorld(OfflinePlayer offlinePlayer) {
@@ -102,8 +121,8 @@ public class SleepSkipPlaceholderExpansion extends PlaceholderExpansion {
 
     private String getUnavailableValue(String params) {
         return switch (params) {
-            case "world" -> "N/A";
-            case "sleeping", "needed", "active_players", "day_count" -> "N/A";
+            case "world", "sleeping", "needed", "active_players", "remaining",
+                 "percent", "state", "speed", "is_night", "day_count" -> "N/A";
             default -> "";
         };
     }

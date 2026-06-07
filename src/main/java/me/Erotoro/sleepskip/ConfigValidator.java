@@ -9,10 +9,17 @@ import java.util.Set;
  */
 public final class ConfigValidator {
 
-    private static final Set<String> SUPPORTED_LANGUAGES = Set.of("ru", "en", "ua");
+    private static final Set<String> SUPPORTED_LANGUAGES = Set.of("ru", "en", "ua", "de", "es", "fr", "pl", "pt", "zh");
     private static final Set<String> SUPPORTED_REQUIRED_TYPES = Set.of("fixed", "percent");
     private static final Set<String> SUPPORTED_WEATHER_SLEEP_MODES = Set.of("none", "thunderstorm");
     private static final Set<String> SUPPORTED_DAY_COUNTER_ANIMATION_MODES = Set.of("static", "typewriter");
+    private static final Set<String> SUPPORTED_OVERLAY_MODES = Set.of("title", "bossbar", "both");
+    private static final Set<String> SUPPORTED_BOSSBAR_STYLES = Set.of(
+            "progress", "notched_6", "notched_10", "notched_12", "notched_20"
+    );
+    private static final Set<String> SUPPORTED_BOSSBAR_COLORS = Set.of(
+            "pink", "blue", "red", "green", "yellow", "purple", "white"
+    );
     private static final String LEGACY_THRESHOLD_SKIP_MODE = "threshold_skip";
     private static final String UNIFIED_START_THRESHOLD_PERCENT_PATH = "sleep.start-threshold-percent";
     private static final String UNIFIED_MAX_SPEED_MULTIPLIER_PATH = "sleep.max-speed-multiplier";
@@ -69,6 +76,41 @@ public final class ConfigValidator {
 
         if (migrateLegacyNightBehaviorConfig(plugin, config)) {
             changed = true;
+        }
+
+        if (migrateLegacyOverlayEnabled(plugin, config)) {
+            changed = true;
+        }
+
+        String overlayMode = normalizedString(config, "overlay.mode", "both");
+        if (!SUPPORTED_OVERLAY_MODES.contains(overlayMode)) {
+            plugin.getLogger().warning("overlay.mode must be one of: title, bossbar, both. Falling back to both.");
+            config.set("overlay.mode", "both");
+            changed = true;
+        }
+
+        String bossBarStyle = normalizedString(config, "overlay.bossbar.style", "progress");
+        if (!SUPPORTED_BOSSBAR_STYLES.contains(bossBarStyle)) {
+            plugin.getLogger().warning("overlay.bossbar.style is invalid. Falling back to PROGRESS.");
+            config.set("overlay.bossbar.style", "PROGRESS");
+            changed = true;
+        }
+
+        for (String colorPath : new String[]{
+                "overlay.bossbar.night-color",
+                "overlay.bossbar.weather-color",
+                "overlay.bossbar.transition-color",
+                "overlay.bossbar.acceleration-color"
+        }) {
+            if (!config.contains(colorPath)) {
+                continue;
+            }
+            String color = normalizedString(config, colorPath, "blue");
+            if (!SUPPORTED_BOSSBAR_COLORS.contains(color)) {
+                plugin.getLogger().warning(colorPath + " is invalid. Falling back to BLUE.");
+                config.set(colorPath, "BLUE");
+                changed = true;
+            }
         }
 
         double startThresholdPercent = config.getDouble(UNIFIED_START_THRESHOLD_PERCENT_PATH, 50D);
@@ -201,6 +243,24 @@ public final class ConfigValidator {
             }
         }
         return fallback.toLowerCase();
+    }
+
+    private static boolean migrateLegacyOverlayEnabled(SleepSkip plugin, FileConfiguration config) {
+        if (!config.contains("settings.overlay-enabled")) {
+            return false;
+        }
+
+        // Pre-unification builds had a second master switch under settings. Preserve an explicit
+        // opt-out, then drop the duplicate so overlay.enabled is the single source of truth.
+        boolean legacyEnabled = config.getBoolean("settings.overlay-enabled", true);
+        if (!legacyEnabled) {
+            config.set("overlay.enabled", false);
+        }
+        config.set("settings.overlay-enabled", null);
+        plugin.getLogger().warning(
+                "settings.overlay-enabled is deprecated. Migrated to overlay.enabled (single overlay master switch)."
+        );
+        return true;
     }
 
     private static boolean migrateLegacyNightBehaviorConfig(SleepSkip plugin, FileConfiguration config) {

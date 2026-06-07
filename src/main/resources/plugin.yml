@@ -1,19 +1,22 @@
 name: SleepSkip
 version: ${version}
 main: me.Erotoro.sleepskip.SleepSkip
-api-version: '1.21'
+api-version: '1.20'
 folia-supported: true
 softdepend: [Essentials, CMI, PlaceholderAPI]
 authors: [Erotoro]
-description: SleepSkipUltra - smooth night skipping with acceleration, overlay UI, and Paper/Folia 1.21+ support
+description: SleepSkipUltra - smooth night skipping with acceleration, overlay UI, bossbar, and Paper/Folia 1.20.1+ support
 commands:
   sleep:
     description: SleepSkipUltra commands
-    usage: /sleep <reload|status|broadcaststatus|forceskip>
+    usage: /sleep <reload|status|broadcaststatus|forceskip|bossbar>
 permissions:
   sleepskip.admin:
     description: Access to SleepSkip admin commands
     default: op
   sleepskip.bypass:
     description: Excludes a player from SleepSkip counters
+    default: false
+  sleepskip.bossbar.toggle:
+    description: Allows a player to toggle their own sleep bossbar with /sleep bossbar
     default: false

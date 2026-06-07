@@ -56,6 +56,43 @@ class SleepSkipPlaceholderExpansionTest {
     }
 
     @Test
+    void resolvesExtendedPlaceholdersForOnlineWorldContext() {
+        SleepSkip plugin = mock(SleepSkip.class);
+        SleepListener listener = mock(SleepListener.class);
+        DayCounterService dayCounterService = mock(DayCounterService.class);
+        Server server = mock(Server.class);
+        OfflinePlayer offlinePlayer = mock(OfflinePlayer.class);
+
+        FileConfiguration config = new YamlConfiguration();
+        config.set("settings.per-world", false);
+        config.set("placeholders.offline-mode", "global");
+
+        World overworld = mock(World.class);
+        when(overworld.getEnvironment()).thenReturn(World.Environment.NORMAL);
+        when(overworld.getName()).thenReturn("world");
+        when(overworld.getUID()).thenReturn(UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd"));
+        when(overworld.getTime()).thenReturn(13000L); // night
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getServer()).thenReturn(server);
+        when(plugin.getSleepListener()).thenReturn(listener);
+        when(plugin.getDayCounterService()).thenReturn(dayCounterService);
+        when(server.getWorlds()).thenReturn(List.of(overworld));
+        when(listener.getSleepStatus(overworld)).thenReturn(new SleepListener.SleepStatus(5, 2, 4));
+        when(listener.getBehaviorStateName(overworld)).thenReturn("ACCELERATING");
+        when(listener.getCurrentSpeedMultiplier(overworld)).thenReturn(6.0D);
+
+        SleepSkipPlaceholderExpansion expansion = new SleepSkipPlaceholderExpansion(plugin);
+
+        assertEquals("2", expansion.onRequest(offlinePlayer, "remaining"));
+        assertEquals("50", expansion.onRequest(offlinePlayer, "percent"));
+        assertEquals("ACCELERATING", expansion.onRequest(offlinePlayer, "state"));
+        assertEquals("6.0", expansion.onRequest(offlinePlayer, "speed"));
+        assertEquals("true", expansion.onRequest(offlinePlayer, "is_night"));
+        assertEquals("5", expansion.onRequest(offlinePlayer, "active_players"));
+    }
+
+    @Test
     void noneOfflineModeReturnsUnavailableForOfflinePlayerWhenPerWorldDisabled() {
         SleepSkip plugin = mock(SleepSkip.class);
         SleepListener listener = mock(SleepListener.class);

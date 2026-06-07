@@ -1,12 +1,11 @@
 settings:
-  language: "en" # en, ru, ua
+  language: "en" # en, ru, ua, de, es, fr, pl, pt, zh
   required-type: "percent" # fixed or percent
   required-value: 60
 
   ignore-afk: true
   afk-timeout: 300
   count-afk-sleepers: true
-  overlay-enabled: true
 
   actionbar-duration: 5
   transition-duration-ticks: 60 # 20 ticks = 1 second
@@ -22,14 +21,22 @@ sleep:
   update-interval-ticks: 5
 
 overlay:
-  enabled: true
-  mode: "title"
+  enabled: true        # master switch for all on-screen feedback (titles and bossbar)
+  mode: "both"         # title, bossbar, both
   update-interval-ticks: 10
   fade-in-ticks: 1
   stay-ticks: 24
   fade-out-ticks: 1
   show-status-before-skip: true
   show-progress-during-transition: true
+  bossbar:
+    allow-personal-toggle: true   # let players with sleepskip.bossbar.toggle run /sleep bossbar on|off
+    default-visible: true         # default bossbar visibility for players who never toggled it
+    style: "PROGRESS"             # PROGRESS, NOTCHED_6, NOTCHED_10, NOTCHED_12, NOTCHED_20
+    night-color: "BLUE"           # PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE
+    weather-color: "BLUE"
+    transition-color: "GREEN"
+    acceleration-color: "YELLOW"
 
 day-counter:
   enabled: true

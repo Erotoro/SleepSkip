@@ -7,12 +7,16 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.logging.Level;
 
 /**
  * Resolves localized strings with optional config overrides for backward compatibility.
  */
 public class LocaleManager {
+
+    /** Single source of truth for bundled locales. Keep in sync with ConfigValidator. */
+    public static final List<String> BUNDLED_LANGUAGES = List.of("en", "ru", "ua", "de", "es", "fr", "pl", "pt", "zh");
 
     private final SleepSkip plugin;
     private FileConfiguration localeConfig;
@@ -30,12 +34,11 @@ public class LocaleManager {
             currentLanguage = "en";
         }
 
-        plugin.saveResource("lang/en.yml", false);
-        plugin.saveResource("lang/ru.yml", false);
-        plugin.saveResource("lang/ua.yml", false);
-        mergeBundledLocaleDefaults(new File(plugin.getDataFolder(), "lang/en.yml"), "lang/en.yml");
-        mergeBundledLocaleDefaults(new File(plugin.getDataFolder(), "lang/ru.yml"), "lang/ru.yml");
-        mergeBundledLocaleDefaults(new File(plugin.getDataFolder(), "lang/ua.yml"), "lang/ua.yml");
+        for (String language : BUNDLED_LANGUAGES) {
+            String resourcePath = "lang/" + language + ".yml";
+            plugin.saveResource(resourcePath, false);
+            mergeBundledLocaleDefaults(new File(plugin.getDataFolder(), resourcePath), resourcePath);
+        }
 
         File localeFile = new File(plugin.getDataFolder(), "lang/" + currentLanguage + ".yml");
         if (!localeFile.exists()) {

@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -60,5 +62,56 @@ class ConfigValidatorTest {
         assertNull(config.get("gradual-acceleration"));
         verify(plugin, times(1)).saveConfig();
         verify(plugin, times(1)).reloadConfig();
+    }
+
+    @Test
+    void validateMigratesLegacyOverlayEnabledFalseIntoOverlayEnabled() {
+        SleepSkip plugin = mock(SleepSkip.class);
+        FileConfiguration config = new YamlConfiguration();
+        config.set("settings.overlay-enabled", false);
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test-config-validator"));
+        when(plugin.tr(anyString(), anyString())).thenAnswer(invocation -> invocation.getArgument(1));
+
+        ConfigValidator.validate(plugin);
+
+        assertNull(config.get("settings.overlay-enabled"));
+        assertFalse(config.getBoolean("overlay.enabled"));
+    }
+
+    @Test
+    void validateDropsLegacyOverlayEnabledTrueWithoutForcingOverlayOff() {
+        SleepSkip plugin = mock(SleepSkip.class);
+        FileConfiguration config = new YamlConfiguration();
+        config.set("settings.overlay-enabled", true);
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test-config-validator"));
+        when(plugin.tr(anyString(), anyString())).thenAnswer(invocation -> invocation.getArgument(1));
+
+        ConfigValidator.validate(plugin);
+
+        assertNull(config.get("settings.overlay-enabled"));
+        assertTrue(config.getBoolean("overlay.enabled", true));
+    }
+
+    @Test
+    void validateNormalizesInvalidOverlayModeAndBossBarStyle() {
+        SleepSkip plugin = mock(SleepSkip.class);
+        FileConfiguration config = new YamlConfiguration();
+        config.set("overlay.mode", "hologram");
+        config.set("overlay.bossbar.style", "rainbow");
+        config.set("overlay.bossbar.night-color", "turquoise");
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("test-config-validator"));
+        when(plugin.tr(anyString(), anyString())).thenAnswer(invocation -> invocation.getArgument(1));
+
+        ConfigValidator.validate(plugin);
+
+        assertEquals("both", config.getString("overlay.mode"));
+        assertEquals("PROGRESS", config.getString("overlay.bossbar.style"));
+        assertEquals("BLUE", config.getString("overlay.bossbar.night-color"));
     }
 }

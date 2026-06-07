@@ -59,6 +59,7 @@ public class SleepListener implements Listener {
     private final ConcurrentHashMap<UUID, ActiveNightAccelerationSession> activeNightAccelerationSessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, NightBehaviorState> nightBehaviorStates = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Integer> suppressedVanillaSleepPercentages = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, Double> currentSpeedMultipliers = new ConcurrentHashMap<>();
 
     public SleepListener(SleepSkip plugin, PlayerStateService playerStateService, SleepOverlayService sleepOverlayService) {
         this.plugin = plugin;
@@ -502,6 +503,7 @@ public class SleepListener implements Listener {
             }
         }
 
+        currentSpeedMultipliers.put(worldId, profile.speedMultiplier());
         sleepOverlayService.showAcceleration(
                 world,
                 state.overlayRecipients(),
@@ -985,6 +987,7 @@ public class SleepListener implements Listener {
         stopAllNightAccelerationSessions(true);
         restoreAllVanillaSleepSkipSuppressions();
         nightBehaviorStates.clear();
+        currentSpeedMultipliers.clear();
     }
 
     public void resetRuntimeState() {
@@ -998,6 +1001,7 @@ public class SleepListener implements Listener {
         statusTracker.invalidateAll();
         restoreAllVanillaSleepSkipSuppressions();
         nightBehaviorStates.clear();
+        currentSpeedMultipliers.clear();
     }
 
     public void invalidateAllCaches() {
@@ -1050,6 +1054,7 @@ public class SleepListener implements Listener {
     }
 
     private void stopNightAcceleration(UUID worldId, World world, boolean stopOverlay) {
+        currentSpeedMultipliers.remove(worldId);
         ActiveNightAccelerationSession session = activeNightAccelerationSessions.remove(worldId);
         if (session == null) {
             if (stopOverlay && world != null) {
@@ -1077,7 +1082,28 @@ public class SleepListener implements Listener {
     private void clearNightBehaviorState(UUID worldId) {
         if (worldId != null) {
             nightBehaviorStates.remove(worldId);
+            currentSpeedMultipliers.remove(worldId);
         }
+    }
+
+    /**
+     * Current night-skip behaviour state for placeholders: IDLE, ACCELERATING or FULL_SKIP.
+     */
+    public String getBehaviorStateName(World world) {
+        if (world == null) {
+            return NightBehaviorState.IDLE.name();
+        }
+        return nightBehaviorStates.getOrDefault(world.getUID(), NightBehaviorState.IDLE).name();
+    }
+
+    /**
+     * Current night acceleration multiplier (1.0 when not accelerating).
+     */
+    public double getCurrentSpeedMultiplier(World world) {
+        if (world == null) {
+            return 1.0D;
+        }
+        return currentSpeedMultipliers.getOrDefault(world.getUID(), 1.0D);
     }
 
     private void transitionNightBehaviorState(World world, NightBehaviorState targetState) {

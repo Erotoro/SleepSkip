@@ -3,13 +3,18 @@ package me.Erotoro.sleepskip.services;
 import me.Erotoro.sleepskip.SleepSkip;
 import me.Erotoro.sleepskip.util.PlatformScheduler;
 import me.Erotoro.sleepskip.util.SleepTimingRules;
+import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -18,11 +23,14 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class SleepOverlayService {
 
     private static final String MODE_TITLE = "title";
+    private static final String MODE_BOSSBAR = "bossbar";
+    private static final String MODE_BOTH = "both";
     private static final int PROGRESS_STEP_PERCENT = 5;
     private static final long TICK_NANOS = 50_000_000L;
     private static final long MIN_COMPLETION_HOLD_TICKS = 4L;
@@ -48,10 +56,17 @@ public class SleepOverlayService {
     private final ConcurrentHashMap<String, OverlaySession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletionGraceState> completionGraceStates = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, List<GuardedPostCompletionTask>> postCompletionTasks = new ConcurrentHashMap<>();
+    // One persistent bossbar object per online viewer; reused across frames to avoid flicker.
+    private final ConcurrentHashMap<UUID, BossBar> playerBossBars = new ConcurrentHashMap<>();
+    // Explicit per-player visibility preferences (absent = use overlay.bossbar.default-visible).
+    private final ConcurrentHashMap<UUID, Boolean> bossBarPreferences = new ConcurrentHashMap<>();
+    private final File bossBarPreferencesFile;
 
     public SleepOverlayService(SleepSkip plugin) {
         this.plugin = plugin;
         this.titleSessionCoordinator = plugin.getTitleSessionCoordinator();
+        this.bossBarPreferencesFile = new File(plugin.getDataFolder(), "bossbar.yml");
+        loadBossBarPreferences();
     }
 
     public void showStatus(
@@ -75,6 +90,7 @@ public class SleepOverlayService {
                         scope(world),
                         Set.copyOf(recipients),
                         OverlayPhase.STATUS,
+                        sleepTarget,
                         templateFor(sleepTarget, OverlayPhase.STATUS),
                         sleeping,
                         needed,
@@ -116,6 +132,7 @@ public class SleepOverlayService {
                         scope(world),
                         Set.copyOf(recipients),
                         OverlayPhase.TRANSITION,
+                        sleepTarget,
                         templateFor(sleepTarget, OverlayPhase.TRANSITION),
                         sleeping,
                         needed,
@@ -147,6 +164,7 @@ public class SleepOverlayService {
                         scope(world),
                         Set.copyOf(recipients),
                         OverlayPhase.ACCELERATION,
+                        SleepTimingRules.SleepTarget.NIGHT,
                         templateFor(SleepTimingRules.SleepTarget.NIGHT, OverlayPhase.ACCELERATION),
                         sleeping,
                         needed,
@@ -223,6 +241,8 @@ public class SleepOverlayService {
         for (String key : allKeys) {
             forceStop(key);
         }
+        // Safety net: ensure no bossbar lingers if a handle outlived its session.
+        hideAllBossBars();
     }
 
     public boolean hasActiveOverlay(World world) {
@@ -295,7 +315,7 @@ public class SleepOverlayService {
                                 + ",transitionDurationTicks=" + currentDescriptor.transitionDurationTicks()
                 );
             }
-            sendTitle(currentDescriptor.scope(), session.token(), frame);
+            sendTitle(currentDescriptor.scope(), session.token(), frame, currentDescriptor);
         }, 1L, intervalTicks);
 
         session.setHandle(handle);
@@ -352,7 +372,7 @@ public class SleepOverlayService {
 
         OverlayFrame finalFrame = renderFrame(descriptor, 100, getUpdateIntervalTicks(), false);
         // Must bypass dedupe here: final completion frame is semantically required and should always be reasserted.
-        sendTitle(descriptor.scope(), session.token(), finalFrame);
+        sendTitle(descriptor.scope(), session.token(), finalFrame, descriptor);
         long completionHoldTicks = resolveCompletionHoldTicks(getUpdateIntervalTicks());
         armCompletionGrace(
                 descriptor.scope().key(),
@@ -445,8 +465,22 @@ public class SleepOverlayService {
         boolean hasQueuedPostTasks = hasQueuedPostCompletionTasks(key);
         if (shouldClearRecipientsBeforePostCompletionTasks(hasQueuedPostTasks)) {
             clearRecipients(state.scope(), state.token(), state.recipients());
+        } else if (shouldHideBossBarsAfterCompletionGrace(hasQueuedPostTasks)) {
+            // A queued post-completion task (e.g. the day-counter "Day N" title) replaces the TITLE only.
+            // The bossbar is a separate persistent object that nothing else hides, so it must be dropped
+            // here explicitly — otherwise it freezes on screen at "... 100%" after the skip.
+            hideBossBars(state.recipients());
         }
         runPostCompletionTasks(key);
+    }
+
+    /**
+     * Bossbars must always be hidden once the completion grace ends — even when a title-only
+     * post-completion task (the day-counter announcement) is queued and the title clear is skipped.
+     * This decoupling is what prevents the bossbar from freezing at "... 100%" after a skip.
+     */
+    static boolean shouldHideBossBarsAfterCompletionGrace(boolean hasQueuedPostTasks) {
+        return true;
     }
 
     private void runPostCompletionTasks(String key) {
@@ -531,17 +565,26 @@ public class SleepOverlayService {
         if (!session.shouldSend(frame)) {
             return;
         }
-        sendTitle(descriptor.scope(), session.token(), frame);
+        sendTitle(descriptor.scope(), session.token(), frame, descriptor);
     }
 
-    private void sendTitle(OverlayScope scope, long token, OverlayFrame frame) {
-        Component title = MINI_MESSAGE.deserialize(frame.title());
-        Component subtitle = MINI_MESSAGE.deserialize(frame.subtitle());
-        Title renderedTitle = Title.title(title, subtitle, Title.Times.times(
-                ticksToDuration(frame.fadeInTicks()),
-                ticksToDuration(frame.stayTicks()),
-                ticksToDuration(frame.fadeOutTicks())
-        ));
+    private void sendTitle(OverlayScope scope, long token, OverlayFrame frame, OverlayDescriptor descriptor) {
+        boolean titleMode = isTitleMode();
+        boolean bossBarMode = isBossBarMode();
+        if (!titleMode && !bossBarMode) {
+            return;
+        }
+
+        Title renderedTitle = titleMode
+                ? Title.title(
+                MINI_MESSAGE.deserialize(frame.title()),
+                MINI_MESSAGE.deserialize(frame.subtitle()),
+                Title.Times.times(
+                        ticksToDuration(frame.fadeInTicks()),
+                        ticksToDuration(frame.stayTicks()),
+                        ticksToDuration(frame.fadeOutTicks())
+                ))
+                : null;
 
         for (UUID recipient : frame.recipients()) {
             Player player = Bukkit.getPlayer(recipient);
@@ -549,8 +592,21 @@ public class SleepOverlayService {
                 continue;
             }
             PlatformScheduler.runForPlayer(plugin, player, () -> {
-                if (titleSessionCoordinator.isCurrent(scope.key(), token) && isValidRecipient(player, scope)) {
+                if (!titleSessionCoordinator.isCurrent(scope.key(), token)) {
+                    return;
+                }
+                if (!isValidRecipient(player, scope)) {
+                    // E.g. per-world scope and the player walked into another world: drop their bossbar.
+                    hideBossBarFor(player);
+                    return;
+                }
+                if (titleMode && renderedTitle != null) {
                     player.showTitle(renderedTitle);
+                }
+                if (bossBarMode) {
+                    applyBossBar(player, descriptor, frame);
+                } else {
+                    hideBossBarFor(player);
                 }
             });
         }
@@ -574,13 +630,190 @@ public class SleepOverlayService {
         for (UUID recipient : recipients) {
             Player player = Bukkit.getPlayer(recipient);
             if (player == null || !player.isOnline()) {
+                // Drop any tracked handle for offline players so the map cannot leak.
+                playerBossBars.remove(recipient);
                 continue;
             }
             PlatformScheduler.runForPlayer(plugin, player, () -> {
-                if (titleSessionCoordinator.isCurrent(scope.key(), token) && isValidRecipient(player, scope)) {
+                if (!titleSessionCoordinator.isCurrent(scope.key(), token)) {
+                    // A newer session owns this scope; it is responsible for its own visuals.
+                    return;
+                }
+                if (isValidRecipient(player, scope)) {
                     player.clearTitle();
                 }
+                hideBossBarFor(player);
             });
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Bossbar rendering and per-player visibility
+    // ---------------------------------------------------------------------
+
+    /** Runs on the recipient's region thread. Creates or updates the player's reusable bossbar. */
+    private void applyBossBar(Player player, OverlayDescriptor descriptor, OverlayFrame frame) {
+        if (!isBossBarVisible(player.getUniqueId())) {
+            hideBossBarFor(player);
+            return;
+        }
+
+        BossBar bar = playerBossBars.computeIfAbsent(
+                player.getUniqueId(),
+                ignored -> BossBar.bossBar(Component.empty(), 0.0f, BossBar.Color.BLUE, BossBar.Overlay.PROGRESS)
+        );
+        bar.name(MINI_MESSAGE.deserialize(frame.subtitle()));
+        bar.color(resolveBossBarColor(descriptor));
+        bar.overlay(resolveBossBarOverlay());
+        bar.progress(resolveBossBarProgress(descriptor, frame));
+        player.showBossBar(bar);
+    }
+
+    /** Runs on the recipient's region thread. */
+    private void hideBossBarFor(Player player) {
+        BossBar bar = playerBossBars.remove(player.getUniqueId());
+        if (bar != null) {
+            player.hideBossBar(bar);
+        }
+    }
+
+    private float resolveBossBarProgress(OverlayDescriptor descriptor, OverlayFrame frame) {
+        if (descriptor.phase() == OverlayPhase.TRANSITION) {
+            return clamp01(frame.progress() / 100.0f);
+        }
+        if (descriptor.needed() <= 0) {
+            return 0.0f;
+        }
+        return clamp01(descriptor.sleeping() / (float) descriptor.needed());
+    }
+
+    private BossBar.Color resolveBossBarColor(OverlayDescriptor descriptor) {
+        String path;
+        if (descriptor.phase() == OverlayPhase.TRANSITION) {
+            path = "overlay.bossbar.transition-color";
+        } else if (descriptor.phase() == OverlayPhase.ACCELERATION) {
+            path = "overlay.bossbar.acceleration-color";
+        } else if (descriptor.target() == SleepTimingRules.SleepTarget.WEATHER) {
+            path = "overlay.bossbar.weather-color";
+        } else {
+            path = "overlay.bossbar.night-color";
+        }
+        return parseBossBarColor(plugin.getConfig().getString(path, "BLUE"));
+    }
+
+    private BossBar.Color parseBossBarColor(String raw) {
+        if (raw == null) {
+            return BossBar.Color.BLUE;
+        }
+        try {
+            return BossBar.Color.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return BossBar.Color.BLUE;
+        }
+    }
+
+    private BossBar.Overlay resolveBossBarOverlay() {
+        String raw = plugin.getConfig().getString("overlay.bossbar.style", "PROGRESS");
+        if (raw == null) {
+            return BossBar.Overlay.PROGRESS;
+        }
+        try {
+            return BossBar.Overlay.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return BossBar.Overlay.PROGRESS;
+        }
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0.0f, Math.min(1.0f, value));
+    }
+
+    /** Whether the bossbar feature is active server-wide (master switch + mode includes bossbar). */
+    public boolean isBossBarFeatureEnabled() {
+        return plugin.getConfig().getBoolean("overlay.enabled", true) && isBossBarMode();
+    }
+
+    public boolean isPersonalToggleAllowed() {
+        return plugin.getConfig().getBoolean("overlay.bossbar.allow-personal-toggle", true);
+    }
+
+    public boolean isBossBarVisible(UUID playerId) {
+        Boolean preference = bossBarPreferences.get(playerId);
+        if (preference != null) {
+            return preference;
+        }
+        return plugin.getConfig().getBoolean("overlay.bossbar.default-visible", true);
+    }
+
+    /** Persists a player's personal bossbar preference and applies a hide immediately when turned off. */
+    public void setBossBarVisible(UUID playerId, boolean visible) {
+        bossBarPreferences.put(playerId, visible);
+        saveBossBarPreferences();
+
+        if (!visible) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline()) {
+                PlatformScheduler.runForPlayer(plugin, player, () -> hideBossBarFor(player));
+            }
+        }
+    }
+
+    /** Hides bossbars for a specific set of recipients (token-independent), each on its region thread. */
+    private void hideBossBars(Collection<UUID> recipients) {
+        if (recipients == null) {
+            return;
+        }
+        for (UUID playerId : recipients) {
+            Player player = Bukkit.getPlayer(playerId);
+            BossBar bar = playerBossBars.remove(playerId);
+            if (bar != null && player != null && player.isOnline()) {
+                PlatformScheduler.runForPlayer(plugin, player, () -> player.hideBossBar(bar));
+            }
+        }
+    }
+
+    private void hideAllBossBars() {
+        for (UUID playerId : Set.copyOf(playerBossBars.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            BossBar bar = playerBossBars.remove(playerId);
+            if (bar != null && player != null && player.isOnline()) {
+                PlatformScheduler.runForPlayer(plugin, player, () -> player.hideBossBar(bar));
+            }
+        }
+    }
+
+    private void loadBossBarPreferences() {
+        bossBarPreferences.clear();
+        if (!bossBarPreferencesFile.exists()) {
+            return;
+        }
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(bossBarPreferencesFile);
+        ConfigurationSection section = config.getConfigurationSection("players");
+        if (section == null) {
+            return;
+        }
+        for (String key : section.getKeys(false)) {
+            try {
+                bossBarPreferences.put(UUID.fromString(key), section.getBoolean(key));
+            } catch (IllegalArgumentException ignored) {
+                // Skip malformed UUID entries.
+            }
+        }
+    }
+
+    private synchronized void saveBossBarPreferences() {
+        YamlConfiguration config = new YamlConfiguration();
+        for (var entry : bossBarPreferences.entrySet()) {
+            config.set("players." + entry.getKey(), entry.getValue());
+        }
+        try {
+            File parent = bossBarPreferencesFile.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                plugin.getLogger().warning("Failed to create plugin data folder for bossbar preferences.");
+            }
+            config.save(bossBarPreferencesFile);
+        } catch (IOException exception) {
+            plugin.getLogger().log(Level.WARNING, "Failed to save bossbar.yml", exception);
         }
     }
 
@@ -638,19 +871,31 @@ public class SleepOverlayService {
     }
 
     private boolean isOverlayEnabled() {
-        return plugin.getConfig().getBoolean("settings.overlay-enabled", true)
-                && plugin.getConfig().getBoolean("overlay.enabled", true)
-                && MODE_TITLE.equalsIgnoreCase(plugin.getConfig().getString("overlay.mode", MODE_TITLE));
+        return plugin.getConfig().getBoolean("overlay.enabled", true) && (isTitleMode() || isBossBarMode());
+    }
+
+    private String overlayMode() {
+        return plugin.getConfig().getString("overlay.mode", MODE_BOTH);
+    }
+
+    private boolean isTitleMode() {
+        String mode = overlayMode();
+        return MODE_TITLE.equalsIgnoreCase(mode) || MODE_BOTH.equalsIgnoreCase(mode);
+    }
+
+    private boolean isBossBarMode() {
+        String mode = overlayMode();
+        return MODE_BOSSBAR.equalsIgnoreCase(mode) || MODE_BOTH.equalsIgnoreCase(mode);
     }
 
     private int getUpdateIntervalTicks() {
-        return Math.max(5, Math.min(10, plugin.getConfig().getInt("overlay.update-interval-ticks", 8)));
+        return Math.max(5, Math.min(10, plugin.getConfig().getInt("overlay.update-interval-ticks", 10)));
     }
 
     private OverlayTimings resolveTimings(int updateIntervalTicks, boolean activelyMaintained) {
-        int fadeInTicks = (int) Math.max(0L, plugin.getConfig().getLong("overlay.fade-in-ticks", 2L));
-        int fadeOutTicks = (int) Math.max(0L, plugin.getConfig().getLong("overlay.fade-out-ticks", 4L));
-        int configuredStayTicks = (int) Math.max(1L, plugin.getConfig().getLong("overlay.stay-ticks", 14L));
+        int fadeInTicks = (int) Math.max(0L, plugin.getConfig().getLong("overlay.fade-in-ticks", 1L));
+        int fadeOutTicks = (int) Math.max(0L, plugin.getConfig().getLong("overlay.fade-out-ticks", 1L));
+        int configuredStayTicks = (int) Math.max(1L, plugin.getConfig().getLong("overlay.stay-ticks", 24L));
         if (!activelyMaintained) {
             int minimumStayTicks = updateIntervalTicks + fadeOutTicks + 1;
             int stayTicks = Math.max(configuredStayTicks, minimumStayTicks);
@@ -808,6 +1053,7 @@ public class SleepOverlayService {
             OverlayScope scope,
             Set<UUID> recipients,
             OverlayPhase phase,
+            SleepTimingRules.SleepTarget target,
             OverlayTemplate template,
             int sleeping,
             int needed,
@@ -816,7 +1062,7 @@ public class SleepOverlayService {
             String speedMultiplier
     ) {
         private OverlayDescriptor withRecipients(Set<UUID> recipients) {
-            return new OverlayDescriptor(scope, recipients, phase, template, sleeping, needed, remaining, transitionDurationTicks, speedMultiplier);
+            return new OverlayDescriptor(scope, recipients, phase, target, template, sleeping, needed, remaining, transitionDurationTicks, speedMultiplier);
         }
     }
 

@@ -55,4 +55,12 @@ class SleepOverlayServiceProgressTest {
     void completionGraceClearsRecipientsWhenNoMorningAnnouncementIsQueued() {
         assertTrue(SleepOverlayService.shouldClearRecipientsBeforePostCompletionTasks(false));
     }
+
+    @Test
+    void bossBarIsHiddenAfterCompletionGraceEvenWhenMorningAnnouncementIsQueued() {
+        // Regression guard for the bossbar-freeze bug: when a day-counter title is queued the
+        // recipient title-clear is skipped, but the bossbar must still be hidden.
+        assertTrue(SleepOverlayService.shouldHideBossBarsAfterCompletionGrace(true));
+        assertTrue(SleepOverlayService.shouldHideBossBarsAfterCompletionGrace(false));
+    }
 }
