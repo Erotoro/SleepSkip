@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest an idea for SleepSkipUltra
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest a new feature or improvement for SleepSkipUltra.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      placeholder: "What problem would this feature solve?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Suggested solution
+      placeholder: "Describe how you want it to work."
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Extra context
+      placeholder: "Screenshots, examples, similar plugins, etc."
+    validations:
+      required: false
