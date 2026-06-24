@@ -9,7 +9,9 @@ import java.util.Set;
  */
 public final class ConfigValidator {
 
-    private static final Set<String> SUPPORTED_LANGUAGES = Set.of("ru", "en", "ua", "de", "es", "fr", "pl", "pt", "zh");
+    private static final Set<String> SUPPORTED_LANGUAGES = Set.of(
+            "ru", "en", "ua", "de", "es", "fr", "pl", "pt", "zh", "it", "cs", "hi", "tr", "id", "fi"
+    );
     private static final Set<String> SUPPORTED_REQUIRED_TYPES = Set.of("fixed", "percent");
     private static final Set<String> SUPPORTED_WEATHER_SLEEP_MODES = Set.of("none", "thunderstorm");
     private static final Set<String> SUPPORTED_DAY_COUNTER_ANIMATION_MODES = Set.of("static", "typewriter");

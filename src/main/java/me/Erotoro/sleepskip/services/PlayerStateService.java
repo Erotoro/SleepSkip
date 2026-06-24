@@ -14,11 +14,13 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -167,8 +169,40 @@ public class PlayerStateService implements Listener {
                 player.hasMetadata("NPC"),
                 externalPluginHooks.isVanished(player),
                 resolveAfkFlag(ignoreAfk, localAfk, externalAfk),
-                player.isSleeping()
+                player.isSleeping(),
+                resolveSleepWeight(player)
         ));
+    }
+
+    /**
+     * How many sleepers this player counts as. Resolved here (on the player's own thread, where
+     * permission lookups are safe) so the counting hot path can stay snapshot-only. Returns 1 unless
+     * weighted sleep is enabled and the player holds a {@code sleepskip.weight.<n>} permission.
+     */
+    private int resolveSleepWeight(Player player) {
+        if (!plugin.getConfig().getBoolean("limits.weighted-sleep", false)) {
+            return 1;
+        }
+
+        int weight = 1;
+        for (PermissionAttachmentInfo info : player.getEffectivePermissions()) {
+            if (!info.getValue()) {
+                continue;
+            }
+            String permission = info.getPermission().toLowerCase(Locale.ROOT);
+            if (!permission.startsWith("sleepskip.weight.")) {
+                continue;
+            }
+            try {
+                int parsed = Integer.parseInt(permission.substring("sleepskip.weight.".length()));
+                if (parsed > weight) {
+                    weight = parsed;
+                }
+            } catch (NumberFormatException ignored) {
+                // Non-numeric suffixes (e.g. the "*" wildcard node) are not weights.
+            }
+        }
+        return weight;
     }
 
     static boolean resolveAfkFlag(boolean ignoreAfk, boolean localAfk, boolean externalAfk) {

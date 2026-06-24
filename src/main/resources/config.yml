@@ -1,5 +1,5 @@
 settings:
-  language: "en" # en, ru, ua, de, es, fr, pl, pt, zh
+  language: "en" # en, ru, ua, de, es, fr, pl, pt, zh, it, cs, hi, tr, id, fi
   required-type: "percent" # fixed or percent
   required-value: 60
 
@@ -65,9 +65,44 @@ placeholders:
   offline-mode: "none" # none, global, fallback-world
   fallback-world: ""
 
+# Anti-troll limits and world filtering. All optional; defaults below change nothing.
+limits:
+  min-players-online: 0     # require at least N eligible players online before a natural skip can happen (0 = off)
+  skip-cooldown-seconds: 0  # minimum seconds between skips per world (0 = off). Admin /sleep forceskip ignores this.
+  weighted-sleep: false     # honor the sleepskip.weight.<n> permission (a player counts as N sleepers)
+  world-whitelist: []       # if non-empty, ONLY these worlds are managed (by name)
+  world-blacklist: []       # these worlds are never managed (wins over the whitelist)
+
+update-checker:
+  enabled: true                 # check GitHub Releases for a newer version on startup
+  notify-admins-on-join: true   # message players with sleepskip.admin when an update is available
+  interval-hours: 6             # how often to re-check while running (0 disables periodic re-checks)
+
+# Optional reward system. Disabled by default — turn it on only if you want to reward the
+# players who slept when a night/storm skip completes.
+rewards:
+  enabled: false                # master switch (OFF by default)
+  only-natural-skips: false     # true = no rewards when an admin used /sleep forceskip
+  heal: false                   # restore each sleeper to full health
+  feed: false                   # restore each sleeper's hunger and saturation
+  experience: 0                 # experience points granted to each sleeper (0 = none)
+  message: ""                   # optional MiniMessage sent to each rewarded sleeper (empty = none)
+  # Potion effects applied to each sleeper. Uncomment to use:
+  # potion-effects:
+  #   - type: REGENERATION      # effect name (e.g. REGENERATION, SPEED, FIRE_RESISTANCE)
+  #     duration-seconds: 10
+  #     amplifier: 0            # 0 = level I
+  #     ambient: true
+  #     particles: false
+  potion-effects: []
+  # Console commands run once per sleeper; {player} is replaced with the name. Uncomment to use:
+  # commands:
+  #   - "give {player} minecraft:bread 4"
+  commands: []
+
 # Additional overrides for backward compatibility with versions released prior to localisation.
 # If a key is present here, it takes precedence over the lang/<language>.yml file.
-# Please move any custom messages you have created to lang/<language>.yml (en, ru, ua).
+# Please move any custom messages you have created to lang/<language>.yml.
 messages:
   # nightSkipped: "<#F6AD72>Good morning!"
   # weatherSkipped: "<#F6AD72>The thunderstorm has passed!"

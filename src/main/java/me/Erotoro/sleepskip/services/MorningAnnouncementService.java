@@ -170,7 +170,7 @@ public class MorningAnnouncementService {
         }
 
         List<String> frames = new ArrayList<>();
-        List<String> initialTags = styledCharacters.getFirst().activeTags();
+        List<String> initialTags = styledCharacters.get(0).activeTags();
         frames.add(renderStyledText(List.of(), initialTags, true));
         for (int visibleLength = 1; visibleLength <= styledCharacters.size(); visibleLength++) {
             frames.add(renderStyledText(styledCharacters.subList(0, visibleLength), initialTags, true));

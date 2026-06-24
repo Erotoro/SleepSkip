@@ -70,6 +70,7 @@ final class SleepRuntimeSessions {
         private final long startedDayIndex;
         private final boolean forced;
         private volatile Set<UUID> recipients;
+        private volatile Set<UUID> sleepers;
         private volatile PlatformScheduler.TaskHandle finishTaskHandle = NO_OP_TASK;
         private volatile PlatformScheduler.TaskHandle transitionTaskHandle = NO_OP_TASK;
         private volatile PlatformScheduler.TaskHandle validationTaskHandle = NO_OP_TASK;
@@ -81,6 +82,7 @@ final class SleepRuntimeSessions {
                 UUID worldId,
                 SleepTimingRules.SleepTarget sleepTarget,
                 Collection<UUID> recipients,
+                Collection<UUID> sleepers,
                 Integer previousSleepingPercentage,
                 long transitionDurationTicks,
                 long completionDelayTicks,
@@ -90,6 +92,7 @@ final class SleepRuntimeSessions {
             this.worldId = worldId;
             this.sleepTarget = sleepTarget;
             this.recipients = Set.copyOf(recipients);
+            this.sleepers = Set.copyOf(sleepers);
             this.previousSleepingPercentage = previousSleepingPercentage;
             this.transitionDurationTicks = transitionDurationTicks;
             this.completionDelayTicks = completionDelayTicks;
@@ -107,6 +110,14 @@ final class SleepRuntimeSessions {
 
         Set<UUID> recipients() {
             return recipients;
+        }
+
+        Set<UUID> sleepers() {
+            return sleepers;
+        }
+
+        void updateSleepers(Collection<UUID> sleepers) {
+            this.sleepers = Set.copyOf(sleepers);
         }
 
         void updateRecipients(Collection<UUID> recipients) {

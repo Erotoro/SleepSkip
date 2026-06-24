@@ -116,7 +116,7 @@ public class SleepSkipPlaceholderExpansion extends PlaceholderExpansion {
         return plugin.getServer().getWorlds().stream()
                 .filter(world -> world.getEnvironment() == World.Environment.NORMAL)
                 .findFirst()
-                .orElse(plugin.getServer().getWorlds().isEmpty() ? null : plugin.getServer().getWorlds().getFirst());
+                .orElse(plugin.getServer().getWorlds().isEmpty() ? null : plugin.getServer().getWorlds().get(0));
     }
 
     private String getUnavailableValue(String params) {

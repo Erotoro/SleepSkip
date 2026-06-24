@@ -4,6 +4,9 @@ import me.Erotoro.sleepskip.SleepSkip;
 import me.Erotoro.sleepskip.util.SleepTimingRules;
 import org.bukkit.World;
 
+import java.util.List;
+import java.util.Locale;
+
 final class SleepRuleConfig {
 
     private static final long DEFAULT_DAY_TRANSITION_TICKS = 60L;
@@ -25,7 +28,41 @@ final class SleepRuleConfig {
     }
 
     SleepTimingRules.SleepTarget getSleepTarget(World world) {
+        if (!isWorldManaged(world)) {
+            return SleepTimingRules.SleepTarget.NONE;
+        }
         return SleepTimingRules.resolve(world.getTime(), world.hasStorm(), world.isThundering(), getWeatherSleepMode());
+    }
+
+    /**
+     * Whether SleepSkip should manage the given world, honouring the optional
+     * {@code limits.world-whitelist}/{@code limits.world-blacklist}. A non-empty whitelist is
+     * authoritative: only listed worlds are managed. The blacklist always wins over the whitelist.
+     */
+    boolean isWorldManaged(World world) {
+        String worldName = world.getName().toLowerCase(Locale.ROOT);
+
+        List<String> blacklist = normalizedWorldList("limits.world-blacklist");
+        if (blacklist.contains(worldName)) {
+            return false;
+        }
+
+        List<String> whitelist = normalizedWorldList("limits.world-whitelist");
+        return whitelist.isEmpty() || whitelist.contains(worldName);
+    }
+
+    private List<String> normalizedWorldList(String path) {
+        List<String> configured = plugin.getConfig().getStringList(path);
+        if (configured.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new java.util.ArrayList<>(configured.size());
+        for (String entry : configured) {
+            if (entry != null && !entry.isBlank()) {
+                normalized.add(entry.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        return normalized;
     }
 
     boolean canForceSleepDuringThunderstorm(World world) {

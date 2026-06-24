@@ -12,7 +12,10 @@ import java.nio.file.Path;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -90,5 +93,33 @@ class LocaleManagerTest {
         YamlConfiguration mergedLocale = YamlConfiguration.loadConfiguration(ruPath.toFile());
         assertEquals("Моё утро!", mergedLocale.getString("messages.nightSkipped"));
         assertEquals("<gold><bold>День {day}</bold></gold>", mergedLocale.getString("messages.day-counter-title"));
+    }
+    @Test
+    void reloadDoesNotResaveExistingBundledLocaleFiles() throws Exception {
+        Path dataFolderPath = tempDir.resolve("plugin-data");
+        Path langDir = dataFolderPath.resolve("lang");
+        Files.createDirectories(langDir);
+
+        for (String language : LocaleManager.BUNDLED_LANGUAGES) {
+            Files.writeString(langDir.resolve(language + ".yml"), "messages:\n  nightSkipped: \"stub\"\n");
+        }
+
+        SleepSkip plugin = mock(SleepSkip.class);
+        FileConfiguration config = new YamlConfiguration();
+        config.set("settings.language", "en");
+        byte[] bundledBytes = "messages:\n  nightSkipped: \"stub\"\n".getBytes(StandardCharsets.UTF_8);
+
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getDataFolder()).thenReturn(dataFolderPath.toFile());
+        when(plugin.getLogger()).thenReturn(Logger.getLogger("LocaleManagerTest"));
+        for (String language : LocaleManager.BUNDLED_LANGUAGES) {
+            when(plugin.getResource("lang/" + language + ".yml"))
+                    .thenAnswer(invocation -> new ByteArrayInputStream(bundledBytes));
+        }
+
+        LocaleManager localeManager = new LocaleManager(plugin);
+        localeManager.reload();
+
+        verify(plugin, never()).saveResource(anyString(), eq(false));
     }
 }

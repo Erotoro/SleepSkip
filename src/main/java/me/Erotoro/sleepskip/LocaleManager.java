@@ -16,7 +16,9 @@ import java.util.logging.Level;
 public class LocaleManager {
 
     /** Single source of truth for bundled locales. Keep in sync with ConfigValidator. */
-    public static final List<String> BUNDLED_LANGUAGES = List.of("en", "ru", "ua", "de", "es", "fr", "pl", "pt", "zh");
+    public static final List<String> BUNDLED_LANGUAGES = List.of(
+            "en", "ru", "ua", "de", "es", "fr", "pl", "pt", "zh", "it", "cs", "hi", "tr", "id", "fi"
+    );
 
     private final SleepSkip plugin;
     private FileConfiguration localeConfig;
@@ -36,8 +38,11 @@ public class LocaleManager {
 
         for (String language : BUNDLED_LANGUAGES) {
             String resourcePath = "lang/" + language + ".yml";
-            plugin.saveResource(resourcePath, false);
-            mergeBundledLocaleDefaults(new File(plugin.getDataFolder(), resourcePath), resourcePath);
+            File bundledLocaleFile = new File(plugin.getDataFolder(), resourcePath);
+            if (!bundledLocaleFile.exists()) {
+                plugin.saveResource(resourcePath, false);
+            }
+            mergeBundledLocaleDefaults(bundledLocaleFile, resourcePath);
         }
 
         File localeFile = new File(plugin.getDataFolder(), "lang/" + currentLanguage + ".yml");

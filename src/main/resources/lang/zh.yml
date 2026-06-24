@@ -42,6 +42,7 @@ messages:
   overlay-transition-weather-subtitle: "<#BAE6FD>雷暴正在消散 · {progress}%"
   overlay-acceleration-night-title: "<#F6AD72>夜晚加速中"
   overlay-acceleration-night-subtitle: "<#EC9793>{sleeping}/{needed} 在睡觉 · 速度 {speed}"
+  update-available: "<#F6AD72>SleepSkipUltra 有新版本可用：<gray>{current}</gray> <#F6AD72>→ <green>{latest}</green>。<click:open_url:'{url}'><underlined>点击下载</underlined></click>"
 plugin:
   command-description: "SleepSkipUltra 命令"
   command-usage: "/sleep <reload|status|broadcaststatus|forceskip|bossbar>"

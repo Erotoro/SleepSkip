@@ -134,7 +134,7 @@ final class SleepStatusTracker {
 
             if (sleepingPlayers.contains(snapshot.playerId())
                     && eligibilityService.shouldCountAsSleeping(snapshot, targetWorldId, perWorld, countAfkSleepers, ignoreAfk)) {
-                sleeping++;
+                sleeping += Math.max(1, snapshot.sleepWeight());
             }
         }
 

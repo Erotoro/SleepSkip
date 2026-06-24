@@ -9,8 +9,10 @@ import me.Erotoro.sleepskip.services.DayCounterService;
 import me.Erotoro.sleepskip.services.MorningAnnouncementService;
 import me.Erotoro.sleepskip.placeholders.SleepSkipPlaceholderExpansion;
 import me.Erotoro.sleepskip.services.SleepOverlayService;
+import me.Erotoro.sleepskip.rewards.SleepRewardService;
 import me.Erotoro.sleepskip.services.PlayerStateService;
 import me.Erotoro.sleepskip.services.TitleSessionCoordinator;
+import me.Erotoro.sleepskip.update.UpdateChecker;
 import me.Erotoro.sleepskip.utils.ActionBar;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
@@ -42,6 +44,8 @@ public class SleepSkip extends JavaPlugin {
     private DayCounterService dayCounterService;
     private TitleSessionCoordinator titleSessionCoordinator;
     private SleepListener sleepListener;
+    private SleepRewardService sleepRewardService;
+    private UpdateChecker updateChecker;
     private boolean folia;
     private Metrics metrics;
 
@@ -75,11 +79,20 @@ public class SleepSkip extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(sleepListener, this);
         registerPlaceholderExpansion();
 
+        sleepRewardService = new SleepRewardService(this);
+        Bukkit.getPluginManager().registerEvents(sleepRewardService, this);
+
+        updateChecker = new UpdateChecker(this);
+        updateChecker.start();
+
         getLogger().info(tr("logs.plugin-enabled", "SleepSkip enabled"));
     }
 
     @Override
     public void onDisable() {
+        if (updateChecker != null) {
+            updateChecker.stop();
+        }
         ActionBar.cancelCurrentTask();
         if (sleepListener != null) {
             sleepListener.shutdownActiveSkipSessions();
@@ -151,6 +164,10 @@ public class SleepSkip extends JavaPlugin {
 
     public SleepListener getSleepListener() {
         return sleepListener;
+    }
+
+    public SleepRewardService getSleepRewardService() {
+        return sleepRewardService;
     }
 
     public PlayerStateService getPlayerStateService() {

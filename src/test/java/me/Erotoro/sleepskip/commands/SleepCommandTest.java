@@ -3,6 +3,7 @@ package me.Erotoro.sleepskip.commands;
 import me.Erotoro.sleepskip.LocaleManager;
 import me.Erotoro.sleepskip.SleepSkip;
 import me.Erotoro.sleepskip.listeners.SleepListener;
+import me.Erotoro.sleepskip.rewards.SleepRewardService;
 import me.Erotoro.sleepskip.services.DayCounterService;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -27,6 +28,7 @@ class SleepCommandTest {
         SleepListener listener = mock(SleepListener.class);
         LocaleManager localeManager = mock(LocaleManager.class);
         DayCounterService dayCounterService = mock(DayCounterService.class);
+        SleepRewardService sleepRewardService = mock(SleepRewardService.class);
         CommandSender sender = mock(CommandSender.class);
         Command command = mock(Command.class);
         FileConfiguration config = new YamlConfiguration();
@@ -35,6 +37,7 @@ class SleepCommandTest {
         when(plugin.getSleepListener()).thenReturn(listener);
         when(plugin.getLocaleManager()).thenReturn(localeManager);
         when(plugin.getDayCounterService()).thenReturn(dayCounterService);
+        when(plugin.getSleepRewardService()).thenReturn(sleepRewardService);
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.getLogger()).thenReturn(Logger.getLogger("SleepCommandTest"));
         when(plugin.tr(anyString(), anyString())).thenAnswer(invocation -> invocation.getArgument(1));
@@ -46,5 +49,6 @@ class SleepCommandTest {
         verify(plugin, atLeastOnce()).reloadConfig();
         verify(localeManager, times(1)).reload();
         verify(dayCounterService, times(1)).reload();
+        verify(sleepRewardService, times(1)).reload();
     }
 }

@@ -6,6 +6,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * Small facade over Bukkit/Paper/Folia schedulers used by the plugin.
  */
@@ -39,6 +41,34 @@ public final class PlatformScheduler {
         }
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, runnable, delayTicks, periodTicks);
+        return task::cancel;
+    }
+
+    /** Runs work off the server threads (network, disk, etc.); never touch game state from here. */
+    public static void runAsync(SleepSkip plugin, Runnable runnable) {
+        if (plugin.isFolia()) {
+            Bukkit.getAsyncScheduler().runNow(plugin, scheduledTask -> runnable.run());
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, runnable);
+    }
+
+    /** Repeating off-thread work. Delay/period are expressed in ticks for parity with the sync API. */
+    public static TaskHandle runAsyncAtFixedRate(SleepSkip plugin, Runnable runnable, long initialDelayTicks, long periodTicks) {
+        long safeInitialTicks = Math.max(1L, initialDelayTicks);
+        long safePeriodTicks = Math.max(1L, periodTicks);
+        if (plugin.isFolia()) {
+            ScheduledTask task = Bukkit.getAsyncScheduler().runAtFixedRate(
+                    plugin,
+                    scheduledTask -> runnable.run(),
+                    safeInitialTicks * 50L,
+                    safePeriodTicks * 50L,
+                    TimeUnit.MILLISECONDS
+            );
+            return task::cancel;
+        }
+
+        BukkitTask task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, runnable, safeInitialTicks, safePeriodTicks);
         return task::cancel;
     }
 

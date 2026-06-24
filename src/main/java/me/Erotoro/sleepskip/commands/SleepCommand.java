@@ -58,6 +58,7 @@ public class SleepCommand implements CommandExecutor {
             ConfigValidator.validate(plugin);
             plugin.getLocaleManager().reload();
             plugin.getDayCounterService().reload();
+            plugin.getSleepRewardService().reload();
             sender.sendMessage(miniMessage.deserialize(plugin.tr(
                     "messages.reload-success",
                     "<green>Config reloaded!"

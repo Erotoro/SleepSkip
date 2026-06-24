@@ -42,6 +42,7 @@ messages:
   overlay-transition-weather-subtitle: "<#BAE6FD>La tormenta pasa · {progress}%"
   overlay-acceleration-night-title: "<#F6AD72>Acelerando la noche"
   overlay-acceleration-night-subtitle: "<#EC9793>{sleeping}/{needed} durmiendo · velocidad {speed}"
+  update-available: "<#F6AD72>Hay una nueva versión de SleepSkipUltra disponible: <gray>{current}</gray> <#F6AD72>→ <green>{latest}</green>. <click:open_url:'{url}'><underlined>Descargar aquí</underlined></click>"
 plugin:
   command-description: "Comandos de SleepSkipUltra"
   command-usage: "/sleep <reload|status|broadcaststatus|forceskip|bossbar>"

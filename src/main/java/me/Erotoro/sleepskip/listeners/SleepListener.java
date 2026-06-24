@@ -1,6 +1,10 @@
 package me.Erotoro.sleepskip.listeners;
 
 import me.Erotoro.sleepskip.SleepSkip;
+import me.Erotoro.sleepskip.api.SleepSkipType;
+import me.Erotoro.sleepskip.api.event.SleepSkipCancelEvent;
+import me.Erotoro.sleepskip.api.event.SleepSkipCompleteEvent;
+import me.Erotoro.sleepskip.api.event.SleepSkipStartEvent;
 import me.Erotoro.sleepskip.services.DayCounterService;
 import me.Erotoro.sleepskip.services.PlayerEligibilityService;
 import me.Erotoro.sleepskip.services.PlayerStateService;
@@ -55,6 +59,7 @@ public class SleepListener implements Listener {
     private final DayCounterService dayCounterService;
     private final SleepRuleConfig ruleConfig;
     private final SleepStatusTracker statusTracker;
+    private final SleepGuards sleepGuards;
     private final ConcurrentHashMap<UUID, ActiveSkipSession> activeSkipSessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, ActiveNightAccelerationSession> activeNightAccelerationSessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, NightBehaviorState> nightBehaviorStates = new ConcurrentHashMap<>();
@@ -68,6 +73,7 @@ public class SleepListener implements Listener {
         this.dayCounterService = plugin.getDayCounterService();
         this.ruleConfig = new SleepRuleConfig(plugin);
         this.statusTracker = new SleepStatusTracker(plugin, playerStateService, new PlayerEligibilityService());
+        this.sleepGuards = new SleepGuards(plugin);
     }
 
     @EventHandler
@@ -221,7 +227,8 @@ public class SleepListener implements Listener {
     }
 
     private void handleWeatherSleepState(World world, SleepState state) {
-        if (state.sleepingPlayers() >= state.requiredPlayers()) {
+        if (state.sleepingPlayers() >= state.requiredPlayers()
+                && !sleepGuards.isSkipBlocked(world, state.recipients().size())) {
             startSkip(world, state, SleepTimingRules.SleepTarget.WEATHER);
             return;
         }
@@ -263,6 +270,11 @@ public class SleepListener implements Listener {
 
     private NightBehaviorPlan buildNightBehaviorPlan(World world, SleepState state) {
         if (state.sleepingPlayers() <= 0 || state.requiredPlayers() <= 0) {
+            return new NightBehaviorPlan(NightBehaviorState.IDLE, null);
+        }
+
+        // Anti-troll gates block natural skips/acceleration while still showing sleep status.
+        if (sleepGuards.isSkipBlocked(world, state.recipients().size())) {
             return new NightBehaviorPlan(NightBehaviorState.IDLE, null);
         }
 
@@ -401,6 +413,7 @@ public class SleepListener implements Listener {
                 worldId,
                 sleepTarget,
                 Set.copyOf(recipients),
+                collectWorldSleepers(world),
                 previousSleepingPercentage,
                 transitionDurationTicks,
                 completionDelayTicks,
@@ -412,6 +425,20 @@ public class SleepListener implements Listener {
             restoreVanillaSleepSkip(world, previousSleepingPercentage);
             return;
         }
+
+        SleepSkipStartEvent startEvent = new SleepSkipStartEvent(
+                world, toApiType(sleepTarget), sleepingPlayers, Math.max(1, requiredPlayers), Set.copyOf(recipients), forced);
+        Bukkit.getPluginManager().callEvent(startEvent);
+        if (startEvent.isCancelled()) {
+            // Unwind the just-created session so a vetoed attempt leaves no trace; the skip can be
+            // re-attempted (and re-fire this event) the next time the conditions are met.
+            activeSkipSessions.remove(worldId, session);
+            restoreVanillaSleepSkip(world, previousSleepingPercentage);
+            transitionNightBehaviorState(world, NightBehaviorState.IDLE);
+            logOverlayLifecycle(world, "skip_cancelled_by_api", "target=" + sleepTarget);
+            return;
+        }
+
         if (forced) {
             session.markCommitted();
         }
@@ -645,6 +672,11 @@ public class SleepListener implements Listener {
             }
             session.cancelTasks();
 
+            // Preserve start-of-skip sleepers and include any players still sleeping at completion.
+            Set<UUID> sleepers = new LinkedHashSet<>(session.sleepers());
+            sleepers.addAll(collectWorldSleepers(world));
+            session.updateSleepers(sleepers);
+
             if (session.sleepTarget() == SleepTimingRules.SleepTarget.NIGHT) {
                 if (!hasDayAdvancedSinceSkipStarted(session.startedDayIndex(), currentDayIndex(world))) {
                     applyConfiguredMorningTime(world);
@@ -678,6 +710,8 @@ public class SleepListener implements Listener {
                             + ",recipients=" + state.recipients().size()
             );
             logOverlayLifecycle(world, "skip_finish_complete_transition_called", "target=" + session.sleepTarget());
+            sleepGuards.markSkipped(world);
+            fireSkipComplete(world, session.sleepTarget(), sleepers, session.recipients(), false, session.forced());
             activeSkipSessions.remove(world.getUID(), session);
         };
 
@@ -936,6 +970,7 @@ public class SleepListener implements Listener {
         sleepOverlayService.stop(world);
         statusTracker.invalidate(world);
         transitionNightBehaviorState(world, NightBehaviorState.IDLE);
+        fireSkipCancel(world, session.sleepTarget(), SleepSkipCancelEvent.Reason.CONDITIONS_NOT_MET);
 
         if (!notifyCancellation) {
             return;
@@ -1213,6 +1248,16 @@ public class SleepListener implements Listener {
 
     private void executeInstantSkip(World world, SleepTimingRules.SleepTarget sleepTarget) {
         SleepState state = getSleepState(world);
+
+        Set<UUID> recipients = collectWorldRecipients(world);
+        SleepSkipStartEvent startEvent = new SleepSkipStartEvent(
+                world, toApiType(sleepTarget), state.sleepingPlayers(), Math.max(1, state.requiredPlayers()), recipients, true);
+        Bukkit.getPluginManager().callEvent(startEvent);
+        if (startEvent.isCancelled()) {
+            return;
+        }
+        Set<UUID> sleepers = collectWorldSleepers(world);
+
         if (sleepTarget == SleepTimingRules.SleepTarget.NIGHT) {
             long targetTime = Math.max(0L, Math.min(23999L, plugin.getConfig().getLong("settings.daytime-ticks", 0L)));
             world.setFullTime(resolveNextMorningFullTime(world.getFullTime(), world.getTime(), targetTime));
@@ -1228,6 +1273,8 @@ public class SleepListener implements Listener {
         removeSleepingPlayersForWorld(world);
         statusTracker.invalidate(world);
         sleepOverlayService.stop(world);
+        sleepGuards.markSkipped(world);
+        fireSkipComplete(world, sleepTarget, sleepers, recipients, true, true);
     }
 
     private Set<UUID> collectWorldRecipients(World world) {
@@ -1236,6 +1283,31 @@ public class SleepListener implements Listener {
             recipients.add(player.getUniqueId());
         }
         return recipients;
+    }
+
+    /** Players currently tracked as sleeping in the given world (the natural reward targets). */
+    private Set<UUID> collectWorldSleepers(World world) {
+        Set<UUID> sleepers = new LinkedHashSet<>();
+        for (UUID playerId : statusTracker.sleepingPlayersSnapshot()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline() && player.getWorld().equals(world)) {
+                sleepers.add(playerId);
+            }
+        }
+        return sleepers;
+    }
+
+    private static SleepSkipType toApiType(SleepTimingRules.SleepTarget sleepTarget) {
+        return sleepTarget == SleepTimingRules.SleepTarget.WEATHER ? SleepSkipType.WEATHER : SleepSkipType.NIGHT;
+    }
+
+    private void fireSkipComplete(World world, SleepTimingRules.SleepTarget sleepTarget, Collection<UUID> sleepers, Collection<UUID> recipients, boolean instant, boolean forced) {
+        Bukkit.getPluginManager().callEvent(new SleepSkipCompleteEvent(
+                world, toApiType(sleepTarget), Set.copyOf(sleepers), Set.copyOf(recipients), instant, forced));
+    }
+
+    private void fireSkipCancel(World world, SleepTimingRules.SleepTarget sleepTarget, SleepSkipCancelEvent.Reason reason) {
+        Bukkit.getPluginManager().callEvent(new SleepSkipCancelEvent(world, toApiType(sleepTarget), reason));
     }
 
     private void logForceSkip(CommandSender sender, World world, boolean instant) {

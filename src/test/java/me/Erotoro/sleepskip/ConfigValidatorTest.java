@@ -4,6 +4,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -17,6 +18,25 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ConfigValidatorTest {
+
+    @Test
+    void validateKeepsExpandedSupportedLanguageCodes() {
+        List<String> languages = List.of("it", "cs", "hi", "tr", "id", "fi");
+
+        for (String language : languages) {
+            SleepSkip plugin = mock(SleepSkip.class);
+            FileConfiguration config = new YamlConfiguration();
+            config.set("settings.language", language);
+
+            when(plugin.getConfig()).thenReturn(config);
+            when(plugin.getLogger()).thenReturn(Logger.getLogger("test-config-validator"));
+            when(plugin.tr(anyString(), anyString())).thenAnswer(invocation -> invocation.getArgument(1));
+
+            ConfigValidator.validate(plugin);
+
+            assertEquals(language, config.getString("settings.language"));
+        }
+    }
 
     @Test
     void validateMigratesThresholdSkipModeToUnifiedSleepConfig() {

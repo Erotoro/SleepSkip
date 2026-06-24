@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'me.Erotoro'
-version = '1.9.0'
+version = '1.10.0'
 
 repositories {
     mavenCentral()
@@ -27,10 +27,10 @@ repositories {
 }
 
 dependencies {
-    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
+    compileOnly 'dev.folia:folia-api:1.20.1-R0.1-SNAPSHOT'
     compileOnly 'me.clip:placeholderapi:2.11.6'
     implementation 'org.bstats:bstats-bukkit:3.2.1'
-    testImplementation 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
+    testImplementation 'dev.folia:folia-api:1.20.1-R0.1-SNAPSHOT'
     testImplementation 'me.clip:placeholderapi:2.11.6'
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -38,7 +38,7 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-def targetJavaVersion = 21
+def targetJavaVersion = 17
 java {
     def javaVersion = JavaVersion.toVersion(targetJavaVersion)
     sourceCompatibility = javaVersion
